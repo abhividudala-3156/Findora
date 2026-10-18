@@ -6,18 +6,20 @@ import {
   getItems,
   getItemById,
   updateItem,
-  deleteItem
+  deleteItem,
 } from "../controllers/itemController.js";
+
+import { requireAuth } from "../middleware/auth.js";
 
 const router = Router();
 
-router.route("/")
-  .get(getItems)
-  .post(createItem);
+// Public routes
+router.get("/", getItems);
+router.get("/:id", getItemById);
 
-router.route("/:id")
-  .get(getItemById)
-  .patch(updateItem)
-  .delete(deleteItem);
+// Protected routes
+router.post("/", requireAuth, createItem);
+router.patch("/:id", requireAuth, updateItem);
+router.delete("/:id", requireAuth, deleteItem);
 
 export default router;

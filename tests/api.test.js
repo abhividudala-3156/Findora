@@ -1,9 +1,10 @@
+
 import {
   describe,
   it,
   before,
   beforeEach,
-  after
+  after,
 } from "node:test";
 
 import assert from "node:assert/strict";
@@ -13,10 +14,12 @@ import mongoose from "mongoose";
 import app from "../src/app.js";
 import { connectDB } from "../src/config/database.js";
 import Item from "../src/models/Item.js";
+import User from "../src/models/User.js";
+import { sessionStore } from "../src/config/session.js";
 
-// --------------------------------------------------
-// Shared test utilities
-// --------------------------------------------------
+let agent;
+let csrfToken;
+let currentUserId;
 
 function recentPastDate() {
   const date = new Date();
@@ -24,8 +27,6 @@ function recentPastDate() {
 
   return date.toISOString().slice(0, 10);
 }
-
-const validOccurrenceDate = recentPastDate();
 
 function createValidItem(overrides = {}) {
   return {
@@ -35,16 +36,73 @@ function createValidItem(overrides = {}) {
     type: "lost",
     category: "stationery",
     campusLocation: "University Library",
-    dateOccurred: validOccurrenceDate,
+    dateOccurred: recentPastDate(),
     contactName: "Test Student",
     contactEmail: "teststudent@example.com",
-    ...overrides
+    ...overrides,
   };
 }
 
+// Create a session, register a user, and log in.
+async function createLoggedInAgent(email) {
+  const userAgent = request.agent(app);
+
+  let response = await userAgent.get("/api/auth/csrf-token");
+
+  assert.equal(response.status, 200);
+
+  let token = response.body.csrfToken;
+
+  response = await userAgent
+    .post("/api/auth/register")
+    .set("x-csrf-token", token)
+    .send({
+      name: "API Test Student",
+      email,
+      password: "SecurePass123!",
+    });
+
+  assert.equal(
+    response.status,
+    201,
+    `Registration failed: ${JSON.stringify(response.body)}`
+  );
+
+  response = await userAgent
+    .post("/api/auth/login")
+    .set("x-csrf-token", token)
+    .send({
+      email,
+      password: "SecurePass123!",
+    });
+
+  assert.equal(
+    response.status,
+    200,
+    `Login failed: ${JSON.stringify(response.body)}`
+  );
+
+  // Login regenerates the session. Obtain a token for that session.
+  response = await userAgent.get("/api/auth/csrf-token");
+
+  assert.equal(response.status, 200);
+
+  token = response.body.csrfToken;
+
+  assert.ok(token);
+
+  return {
+    agent: userAgent,
+    csrfToken: token,
+    userId: response.body.userId,
+  };
+}
+
+// Create an item using the authenticated test user.
 async function createItem(overrides = {}) {
-  const response = await request(app)
+  const response = await agent
     .post("/api/items")
+    .set("x-csrf-token", csrfToken)
     .send(createValidItem(overrides));
 
   assert.equal(
@@ -56,9 +114,20 @@ async function createItem(overrides = {}) {
   return response.body.data;
 }
 
-// --------------------------------------------------
-// Database safety
-// --------------------------------------------------
+// Create an anonymous session with a valid CSRF token.
+async function createAnonymousAgent() {
+  const anonymousAgent = request.agent(app);
+
+  const response = await anonymousAgent.get("/api/auth/csrf-token");
+
+  assert.equal(response.status, 200);
+  assert.ok(response.body.csrfToken);
+
+  return {
+    agent: anonymousAgent,
+    csrfToken: response.body.csrfToken,
+  };
+}
 
 describe("Findora API", () => {
   before(async () => {
@@ -89,85 +158,133 @@ describe("Findora API", () => {
     await connectDB();
   });
 
-  // Every test starts with a clean collection.
   beforeEach(async () => {
+    // Clear records only in the guarded test database.
     await Item.deleteMany({});
-  });
+    await User.deleteMany({});
 
+    const testSession = await createLoggedInAgent(
+      "api-test@example.com"
+    );
+
+    agent = testSession.agent;
+    csrfToken = testSession.csrfToken;
+
+    const meResponse = await agent.get("/api/auth/me");
+
+      assert.equal(meResponse.status, 200);
+      assert.ok(meResponse.body.user?.id);
+      currentUserId = meResponse.body.user.id.toString();
+  });
+ 
   after(async () => {
     try {
       if (mongoose.connection.readyState === 1) {
         await Item.deleteMany({});
+        await User.deleteMany({});
       }
     } finally {
-      await mongoose.disconnect();
+      try {
+        await sessionStore.close();
+      } finally {
+        await mongoose.disconnect();
+      }
     }
   });
 
-  // ------------------------------------------------
-  // CREATE
-  // ------------------------------------------------
+  // --------------------------------------------------
+  // CREATE AND AUTHENTICATION
+  // --------------------------------------------------
 
   it("should create a new lost item", async () => {
-    const item = createValidItem();
+    const input = createValidItem();
 
-    const response = await request(app)
+    const response = await agent
       .post("/api/items")
-      .send(item);
+      .set("x-csrf-token", csrfToken)
+      .send(input);
 
     assert.equal(response.status, 201);
     assert.equal(response.body.success, true);
-    assert.equal(response.body.data.title, item.title);
-    assert.equal(response.body.data.type, item.type);
+    assert.equal(response.body.data.title, input.title);
+    assert.equal(response.body.data.type, input.type);
+    assert.ok(response.body.data.owner);
+    assert.equal(
+      response.body.data.owner.toString(),
+      currentUserId.toString()
+    );
+  });
+
+  it("should reject item creation without authentication", async () => {
+    const anonymous = await createAnonymousAgent();
+
+    const response = await anonymous.agent
+      .post("/api/items")
+      .set("x-csrf-token", anonymous.csrfToken)
+      .send(createValidItem());
+
+    assert.equal(response.status, 401);
+    assert.equal(response.body.success, false);
+  });
+
+  it("should assign ownership from the session, not the request body", async () => {
+    const anotherUserId = new mongoose.Types.ObjectId().toString();
+
+    const response = await agent
+      .post("/api/items")
+      .set("x-csrf-token", csrfToken)
+      .send(
+        createValidItem({
+          owner: anotherUserId,
+        })
+      );
+
+    assert.equal(response.status, 201);
+    assert.equal(
+      response.body.data.owner.toString(),
+      currentUserId
+    );
+    assert.notEqual(
+      response.body.data.owner.toString(),
+      anotherUserId
+    );
   });
 
   it("should reject an item with an invalid category", async () => {
-    const response = await request(app)
+    const response = await agent
       .post("/api/items")
-      .send(
-        createValidItem({
-          category: "invalid-category"
-        })
-      );
+      .set("x-csrf-token", csrfToken)
+      .send(createValidItem({ category: "invalid-category" }));
 
     assert.equal(response.status, 400);
     assert.equal(response.body.success, false);
   });
 
   it("should reject a title that is too short", async () => {
-    const response = await request(app)
+    const response = await agent
       .post("/api/items")
-      .send(
-        createValidItem({
-          title: "A"
-        })
-      );
+      .set("x-csrf-token", csrfToken)
+      .send(createValidItem({ title: "A" }));
 
     assert.equal(response.status, 400);
     assert.equal(response.body.success, false);
   });
 
   it("should reject a description that is too short", async () => {
-    const response = await request(app)
+    const response = await agent
       .post("/api/items")
-      .send(
-        createValidItem({
-          description: "Too short"
-        })
-      );
+      .set("x-csrf-token", csrfToken)
+      .send(createValidItem({ description: "Too short" }));
 
     assert.equal(response.status, 400);
     assert.equal(response.body.success, false);
   });
 
   it("should reject an item with an invalid type", async () => {
-    const response = await request(app)
+    const response = await agent
       .post("/api/items")
-      .send(
-        createValidItem({
-          type: "missing"
-        })
-      );
+      .set("x-csrf-token", csrfToken)
+      .send(createValidItem({ type: "missing" }));
 
     assert.equal(response.status, 400);
     assert.equal(response.body.success, false);
@@ -177,11 +294,12 @@ describe("Findora API", () => {
     const futureDate = new Date();
     futureDate.setDate(futureDate.getDate() + 30);
 
-    const response = await request(app)
+    const response = await agent
       .post("/api/items")
+      .set("x-csrf-token", csrfToken)
       .send(
         createValidItem({
-          dateOccurred: futureDate.toISOString()
+          dateOccurred: futureDate.toISOString(),
         })
       );
 
@@ -189,9 +307,9 @@ describe("Findora API", () => {
     assert.equal(response.body.success, false);
   });
 
-  // ------------------------------------------------
-  // READ
-  // ------------------------------------------------
+  // --------------------------------------------------
+  // PUBLIC READ
+  // --------------------------------------------------
 
   it("should retrieve an existing item by ID", async () => {
     const item = await createItem();
@@ -276,7 +394,7 @@ describe("Findora API", () => {
       .get("/api/items")
       .query({
         search: "unique-no-match-findora-test",
-        status: "all"
+        status: "all",
       });
 
     assert.equal(response.status, 200);
@@ -284,15 +402,16 @@ describe("Findora API", () => {
     assert.deepEqual(response.body.data, []);
   });
 
-  // ------------------------------------------------
+  // --------------------------------------------------
   // FILTERS
-  // ------------------------------------------------
+  // --------------------------------------------------
 
   it("should filter items by type", async () => {
     await createItem({ type: "lost" });
+
     await createItem({
       title: "Found campus pen",
-      type: "found"
+      type: "found",
     });
 
     const response = await request(app)
@@ -303,24 +422,23 @@ describe("Findora API", () => {
     assert.equal(response.body.success, true);
 
     assert.ok(
-      response.body.data.every(
-        (item) => item.type === "lost"
-      )
+      response.body.data.every((item) => item.type === "lost")
     );
   });
 
   it("should filter items by category", async () => {
     await createItem({ category: "stationery" });
+
     await createItem({
       title: "Found campus electronics",
-      category: "electronics"
+      category: "electronics",
     });
 
     const response = await request(app)
       .get("/api/items")
       .query({
         category: "stationery",
-        status: "all"
+        status: "all",
       });
 
     assert.equal(response.status, 200);
@@ -333,48 +451,110 @@ describe("Findora API", () => {
     );
   });
 
-  // ------------------------------------------------
-  // UPDATE
-  // ------------------------------------------------
+  // --------------------------------------------------
+  // UPDATE AND OWNERSHIP
+  // --------------------------------------------------
 
-  it("should update an existing item", async () => {
+  it("should allow the owner to update an item", async () => {
     const item = await createItem();
 
-    const response = await request(app)
+    const response = await agent
       .patch(`/api/items/${item._id}`)
+      .set("x-csrf-token", csrfToken)
       .send({
-        title: "Found blue campus notebook"
+        title: "Found blue campus notebook",
+        type: "found",
       });
 
     assert.equal(response.status, 200);
     assert.equal(response.body.success, true);
-
     assert.equal(
       response.body.data.title,
       "Found blue campus notebook"
+    );
+    assert.equal(
+      response.body.data.owner.toString(),
+      currentUserId
+    );
+  });
+
+  it("should reject updates without authentication", async () => {
+    const item = await createItem();
+    const anonymous = await createAnonymousAgent();
+
+    const response = await anonymous.agent
+      .patch(`/api/items/${item._id}`)
+      .set("x-csrf-token", anonymous.csrfToken)
+      .send({ title: "Unauthorized title change" });
+
+    assert.equal(response.status, 401);
+  });
+
+  it("should prevent another user from updating an item", async () => {
+    const item = await createItem();
+
+    const anotherUser = await createLoggedInAgent(
+      "another-user@example.com"
+    );
+
+    const response = await anotherUser.agent
+      .patch(`/api/items/${item._id}`)
+      .set("x-csrf-token", anotherUser.csrfToken)
+      .send({ title: "Unauthorized title change" });
+
+    assert.equal(response.status, 403);
+
+    const unchangedItem = await Item.findById(item._id);
+
+    assert.equal(unchangedItem.title, item.title);
+    assert.equal(
+      unchangedItem.owner.toString(),
+      currentUserId
     );
   });
 
   it("should reject an update with no fields", async () => {
     const item = await createItem();
 
-    const response = await request(app)
+    const response = await agent
       .patch(`/api/items/${item._id}`)
+      .set("x-csrf-token", csrfToken)
       .send({});
 
     assert.equal(response.status, 400);
     assert.equal(response.body.success, false);
   });
 
-  // ------------------------------------------------
-  // DELETE
-  // ------------------------------------------------
-
-  it("should delete an existing item", async () => {
+  it("should not allow ownership to be changed during an update", async () => {
     const item = await createItem();
 
-    const deleteResponse = await request(app)
-      .delete(`/api/items/${item._id}`);
+    const anotherUserId = new mongoose.Types.ObjectId().toString();
+
+    const response = await agent
+      .patch(`/api/items/${item._id}`)
+      .set("x-csrf-token", csrfToken)
+      .send({
+        title: "Updated notebook title",
+        owner: anotherUserId,
+      });
+
+    assert.equal(response.status, 200);
+    assert.equal(
+      response.body.data.owner.toString(),
+      currentUserId
+    );
+  });
+
+  // --------------------------------------------------
+  // DELETE AND OWNERSHIP
+  // --------------------------------------------------
+
+  it("should allow the owner to delete an item", async () => {
+    const item = await createItem();
+
+    const deleteResponse = await agent
+      .delete(`/api/items/${item._id}`)
+      .set("x-csrf-token", csrfToken);
 
     assert.equal(deleteResponse.status, 200);
     assert.equal(deleteResponse.body.success, true);
@@ -383,5 +563,40 @@ describe("Findora API", () => {
       .get(`/api/items/${item._id}`);
 
     assert.equal(getResponse.status, 404);
+  });
+
+  it("should reject deletion without authentication", async () => {
+    const item = await createItem();
+    const anonymous = await createAnonymousAgent();
+
+    const response = await anonymous.agent
+      .delete(`/api/items/${item._id}`)
+      .set("x-csrf-token", anonymous.csrfToken);
+
+    assert.equal(response.status, 401);
+
+    assert.ok(await Item.findById(item._id));
+  });
+
+  it("should prevent another user from deleting an item", async () => {
+    const item = await createItem();
+
+    const anotherUser = await createLoggedInAgent(
+      "delete-test-user@example.com"
+    );
+
+    const response = await anotherUser.agent
+      .delete(`/api/items/${item._id}`)
+      .set("x-csrf-token", anotherUser.csrfToken);
+
+    assert.equal(response.status, 403);
+
+    const existingItem = await Item.findById(item._id);
+
+    assert.ok(existingItem);
+    assert.equal(
+      existingItem.owner.toString(),
+      currentUserId
+    );
   });
 });

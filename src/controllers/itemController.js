@@ -2,7 +2,6 @@
 import mongoose from "mongoose";
 import Item from "../models/Item.js";
 
-// Fields clients are allowed to submit when creating an item.
 const CREATE_FIELDS = [
   "title",
   "description",
@@ -12,26 +11,53 @@ const CREATE_FIELDS = [
   "dateOccurred",
   "imageUrl",
   "contactName",
-  "contactEmail"
+  "contactEmail",
 ];
 
-// Fields clients are allowed to update.
 const UPDATE_FIELDS = [...CREATE_FIELDS, "status"];
 
-// Escape special characters before using user input in a regex.
+function pickFields(source, allowedFields) {
+  const result = {};
+
+  for (const field of allowedFields) {
+    if (Object.prototype.hasOwnProperty.call(source, field)) {
+      result[field] = source[field];
+    }
+  }
+
+  return result;
+}
+
 function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-// Handle validation and unexpected errors consistently.
+function ownsItem(item, user) {
+  const ownerId = item?.owner?._id ?? item?.owner;
+  const userId = user?._id ?? user?.id;
+
+  return Boolean(
+    ownerId &&
+    userId &&
+    ownerId.toString() === userId.toString()
+  );
+}
+
 function handleError(error, res) {
   if (
-    error.name === "ValidationError" ||
-    error.name === "CastError"
+    error instanceof mongoose.Error.ValidationError ||
+    error instanceof mongoose.Error.CastError
   ) {
     return res.status(400).json({
       success: false,
-      message: error.message
+      message: error.message,
+    });
+  }
+
+  if (error.code === 11000) {
+    return res.status(409).json({
+      success: false,
+      message: "A record with this value already exists",
     });
   }
 
@@ -39,34 +65,38 @@ function handleError(error, res) {
 
   return res.status(500).json({
     success: false,
-    message: "Internal server error"
+    message: "Internal server error",
   });
 }
 
-// Create an item.
 export async function createItem(req, res) {
   try {
-    const input = req.body ?? {};
+    const userId = req.user?._id ?? req.user?.id;
 
-    const itemData = Object.fromEntries(
-      Object.entries(input).filter(([key]) =>
-        CREATE_FIELDS.includes(key)
-      )
-    );
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
+
+    const itemData = pickFields(req.body ?? {}, CREATE_FIELDS);
+
+    // The owner is always assigned from the authenticated session.
+    itemData.owner = userId;
 
     const item = await Item.create(itemData);
 
     return res.status(201).json({
       success: true,
       message: "Item created successfully",
-      data: item
+      data: item,
     });
   } catch (error) {
     return handleError(error, res);
   }
 }
 
-// Get all items with search, filters, sorting and pagination.
 export async function getItems(req, res) {
   try {
     const {
@@ -77,10 +107,9 @@ export async function getItems(req, res) {
       campusLocation,
       sort = "newest",
       page = "1",
-      limit = "10"
+      limit = "10",
     } = req.query;
 
-    // Validate pagination.
     const pageNumber = Number(page);
     const pageSize = Number(limit);
 
@@ -94,11 +123,10 @@ export async function getItems(req, res) {
       return res.status(400).json({
         success: false,
         message:
-          "Page must be a positive integer and limit must be between 1 and 100"
+          "Page must be a positive integer and limit must be between 1 and 100",
       });
     }
 
-    // Validate filter values.
     const validTypes = ["lost", "found"];
     const validCategories = [
       "electronics",
@@ -107,108 +135,94 @@ export async function getItems(req, res) {
       "clothing",
       "accessories",
       "stationery",
-      "other"
+      "other",
     ];
     const validStatuses = [
       "active",
       "claimed",
       "resolved",
-      "all"
+      "all",
     ];
 
     if (type && !validTypes.includes(type)) {
       return res.status(400).json({
         success: false,
-        message: "Type must be lost or found"
+        message: "Type must be lost or found",
       });
     }
 
     if (category && !validCategories.includes(category)) {
       return res.status(400).json({
         success: false,
-        message: "Invalid item category"
+        message: "Invalid item category",
       });
     }
 
     if (!validStatuses.includes(status)) {
       return res.status(400).json({
         success: false,
-        message: "Invalid item status"
+        message: "Invalid item status",
       });
     }
 
-    // Build the MongoDB filter.
     const filter = {};
 
     if (status !== "all") {
       filter.status = status;
     }
 
-    if (type) {
-      filter.type = type;
-    }
-
-    if (category) {
-      filter.category = category;
-    }
+    if (type) filter.type = type;
+    if (category) filter.category = category;
 
     if (campusLocation) {
       filter.campusLocation = {
-        $regex: escapeRegex(campusLocation),
-        $options: "i"
+        $regex: escapeRegex(String(campusLocation)),
+        $options: "i",
       };
     }
 
     if (search) {
-      const escapedSearch = escapeRegex(search);
+      const escapedSearch = escapeRegex(String(search));
 
       filter.$or = [
-        {
-          title: {
-            $regex: escapedSearch,
-            $options: "i"
-          }
-        },
+        { title: { $regex: escapedSearch, $options: "i" } },
         {
           description: {
             $regex: escapedSearch,
-            $options: "i"
-          }
+            $options: "i",
+          },
         },
         {
           campusLocation: {
             $regex: escapedSearch,
-            $options: "i"
-          }
-        }
+            $options: "i",
+          },
+        },
       ];
     }
 
-    // Supported sorting options.
     const sortOptions = {
       newest: { createdAt: -1 },
       oldest: { createdAt: 1 },
-      title: { title: 1 }
+      title: { title: 1 },
     };
 
     if (!Object.hasOwn(sortOptions, sort)) {
       return res.status(400).json({
         success: false,
-        message: "Sort must be newest, oldest, or title"
+        message: "Sort must be newest, oldest, or title",
       });
     }
 
     const skip = (pageNumber - 1) * pageSize;
 
-    // Retrieve the records and total count concurrently.
     const [items, totalItems] = await Promise.all([
       Item.find(filter)
         .sort(sortOptions[sort])
         .skip(skip)
         .limit(pageSize)
         .lean(),
-
-      Item.countDocuments(filter)
+      Item.countDocuments(filter),
     ]);
 
     return res.status(200).json({
@@ -218,21 +232,20 @@ export async function getItems(req, res) {
         page: pageNumber,
         limit: pageSize,
         totalItems,
-        totalPages: Math.ceil(totalItems / pageSize)
-      }
+        totalPages: Math.ceil(totalItems / pageSize),
+      },
     });
   } catch (error) {
     return handleError(error, res);
   }
 }
 
-// Get one item by ID.
 export async function getItemById(req, res) {
   try {
     if (!mongoose.isValidObjectId(req.params.id)) {
       return res.status(400).json({
         success: false,
-        message: "Invalid item ID"
+        message: "Invalid item ID",
       });
     }
 
@@ -241,92 +254,97 @@ export async function getItemById(req, res) {
     if (!item) {
       return res.status(404).json({
         success: false,
-        message: "Item not found"
+        message: "Item not found",
       });
     }
 
     return res.status(200).json({
       success: true,
-      data: item
+      data: item,
     });
   } catch (error) {
     return handleError(error, res);
   }
 }
 
-// Update an existing item.
 export async function updateItem(req, res) {
   try {
     if (!mongoose.isValidObjectId(req.params.id)) {
       return res.status(400).json({
         success: false,
-        message: "Invalid item ID"
+        message: "Invalid item ID",
       });
     }
 
-    const input = req.body ?? {};
-
-    const updates = Object.fromEntries(
-      Object.entries(input).filter(([key]) =>
-        UPDATE_FIELDS.includes(key)
-      )
-    );
+    const updates = pickFields(req.body ?? {}, UPDATE_FIELDS);
 
     if (Object.keys(updates).length === 0) {
       return res.status(400).json({
         success: false,
-        message: "No valid fields provided for update"
+        message: "No valid fields provided for update",
       });
     }
 
-    const item = await Item.findByIdAndUpdate(
-      req.params.id,
-      { $set: updates },
-      {
-        returnDocument: "after",
-        runValidators: true
-      }
-    );
+    const item = await Item.findById(req.params.id);
 
     if (!item) {
       return res.status(404).json({
         success: false,
-        message: "Item not found"
+        message: "Item not found",
       });
     }
+
+    if (!ownsItem(item, req.user)) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to update this item",
+      });
+    }
+
+    // owner is intentionally excluded from UPDATE_FIELDS.
+    item.set(updates);
+    await item.save();
 
     return res.status(200).json({
       success: true,
       message: "Item updated successfully",
-      data: item
+      data: item,
     });
   } catch (error) {
     return handleError(error, res);
   }
 }
 
-// Delete an existing item.
 export async function deleteItem(req, res) {
   try {
     if (!mongoose.isValidObjectId(req.params.id)) {
       return res.status(400).json({
         success: false,
-        message: "Invalid item ID"
+        message: "Invalid item ID",
       });
     }
 
-    const item = await Item.findByIdAndDelete(req.params.id);
+    const item = await Item.findById(req.params.id);
 
     if (!item) {
       return res.status(404).json({
         success: false,
-        message: "Item not found"
+        message: "Item not found",
       });
     }
 
+    if (!ownsItem(item, req.user)) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to delete this item",
+      });
+    }
+
+    await item.deleteOne();
+
     return res.status(200).json({
       success: true,
-      message: "Item deleted successfully"
+      message: "Item deleted successfully",
     });
   } catch (error) {
     return handleError(error, res);

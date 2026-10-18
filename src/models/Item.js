@@ -87,6 +87,14 @@ const itemSchema = new mongoose.Schema(
       ]
     },
 
+    
+    owner: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+      index: true
+    },
+
     status: {
       type: String,
       enum: {
