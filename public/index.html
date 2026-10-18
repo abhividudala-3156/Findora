@@ -1,0 +1,523 @@
+<!-- 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Find lost belongings and report found items on campus.">
+  <title>Campus Lost & Found</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="/js/app.js" defer></script>
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/" aria-label="Campus Lost and Found home">
+      <span class="brand-icon">C</span>
+      <span>Campus<span class="brand-accent">Find</span></span>
+    </a>
+
+    <nav aria-label="Main navigation">
+      <a class="nav-link active" href="/">Home</a>
+      <a class="nav-link" href="#listings">Browse Items</a>
+      <a class="nav-link" href="#report">Report an Item</a>
+    </nav>
+
+    <a class="header-button" href="#report">+ Report Item</a>
+  </header>
+
+  <main>
+    <section class="hero">
+      <p class="eyebrow">SAI UNIVERSITY · CAMPUS COMMUNITY</p>
+      <h1>Lost something?<br><span>Let's find it.</span></h1>
+      <p class="hero-description">
+        A missing belonging can turn up here. Browse reported items
+        or help someone reconnect with what they've lost.
+      </p>
+
+      <div class="hero-actions">
+        <a class="button button-primary" href="#listings">Browse Items</a>
+        <a class="button button-secondary" href="#report">Report an Item</a>
+      </div>
+
+      <div class="trust-note">
+        <span class="status-dot"></span>
+        Built for the Sai University campus community
+      </div>
+    </section>
+
+    <section class="listings section" id="listings">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">COMMUNITY LISTINGS</p>
+          <h2>Recent items</h2>
+          <p class="muted">Browse lost and found belongings reported on campus.</p>
+        </div>
+        <span class="item-count" id="item-count">Loading items...</span>
+      </div>
+
+      <div class="search-panel">
+        <label class="search-box">
+          <span aria-hidden="true">⌕</span>
+          <input
+            type="search"
+            id="search-input"
+            placeholder="Search by item name or description..."
+            aria-label="Search items"
+          >
+        </label>
+
+        <select id="type-filter" aria-label="Filter by item type">
+          <option value="">All items</option>
+          <option value="lost">Lost items</option>
+          <option value="found">Found items</option>
+        </select>
+
+        <select id="category-filter" aria-label="Filter by category">
+          <option value="">All categories</option>
+          <option value="electronics">Electronics</option>
+          <option value="identification">Identification</option>
+          <option value="books">Books</option>
+          <option value="clothing">Clothing</option>
+          <option value="accessories">Accessories</option>
+          <option value="stationery">Stationery</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      
+    <select id="sort-filter" aria-label="Sort items">
+    <option value="newest">Newest first</option>
+    <option value="oldest">Oldest first</option>
+    <option value="title">Title (A–Z)</option>
+    </select>
+
+
+      <div class="item-grid" id="item-grid" aria-live="polite">
+        <p class="loading-message">Connecting to campus listings...</p>
+      </div>
+
+      <p class="error-message" id="error-message" role="alert" hidden></p>
+    </section>
+    
+<section class="report-section section" id="report">
+  <div class="report-intro">
+    <p class="eyebrow">HELP THE COMMUNITY</p>
+    <h2>Lost something?<br>Found something?</h2>
+    <p class="muted">
+      Share the details below to help reunite lost belongings
+      with their owners.
+    </p>
+  </div>
+
+  <form id="report-form" class="report-form">
+    <h3>Report an item</h3>
+    <p class="form-description">Fields marked * are required.</p>
+
+    <div class="form-group">
+      <label for="item-title">Item name *</label>
+      <input
+        type="text"
+        id="item-title"
+        name="title"
+        placeholder="e.g. Black wireless headphones"
+        minlength="2"
+        maxlength="100"
+        required
+      >
+    </div>
+
+    <div class="form-group">
+      <label for="item-type">Report type *</label>
+      <select id="item-type" name="type" required>
+        <option value="">Select report type</option>
+        <option value="lost">I lost this item</option>
+        <option value="found">I found this item</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="item-category">Category *</label>
+      <select id="item-category" name="category" required>
+        <option value="">Select a category</option>
+        <option value="electronics">Electronics</option>
+        <option value="identification">Identification</option>
+        <option value="books">Books</option>
+        <option value="clothing">Clothing</option>
+        <option value="accessories">Accessories</option>
+        <option value="stationery">Stationery</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="item-description">Description *</label>
+      <textarea
+        id="item-description"
+        name="description"
+        rows="4"
+        minlength="10"
+        maxlength="2000"
+        placeholder="Describe the item and any identifying details..."
+        required
+      ></textarea>
+    </div>
+
+    <div class="form-group">
+      <label for="item-location">Campus location *</label>
+      <input
+        type="text"
+        id="item-location"
+        name="campusLocation"
+        maxlength="150"
+        placeholder="e.g. Library, second floor"
+        required
+      >
+    </div>
+
+    <div class="form-group">
+      <label for="item-date">Date lost or found *</label>
+      <input
+        type="date"
+        id="item-date"
+        name="dateOccurred"
+        required
+      >
+    </div>
+
+    <div class="form-group">
+      <label for="contact-name">Your name *</label>
+      <input
+        type="text"
+        id="contact-name"
+        name="contactName"
+        maxlength="100"
+        autocomplete="name"
+        placeholder="Enter your name"
+        required
+      >
+    </div>
+
+    <div class="form-group">
+      <label for="contact-email">Contact email *</label>
+      <input
+        type="email"
+        id="contact-email"
+        name="contactEmail"
+        maxlength="254"
+        autocomplete="email"
+        placeholder="you@example.com"
+        required
+      >
+    </div>
+
+    <div class="form-group">
+      <label for="item-image">Image URL (optional)</label>
+      <input
+        type="url"
+        id="item-image"
+        name="imageUrl"
+        maxlength="2048"
+        placeholder="https://example.com/image.jpg"
+      >
+    </div>
+
+    <button type="submit" class="button button-primary" id="submit-report">
+      Submit Report
+    </button>
+
+    <p id="form-message" class="form-message" role="status" aria-live="polite" hidden></p>
+  </form>
+</section>
+
+  </main>
+
+  <footer class="site-footer">
+    <a class="brand footer-brand" href="/">
+      <span class="brand-icon">C</span>
+      <span>Campus<span class="brand-accent">Find</span></span>
+    </a>
+    <p>Made for the Sai University campus community.</p>
+    <p>Campus Lost & Found · 2026–2027</p>
+  </footer>
+</body>
+</html> -->
+
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta
+    name="description"
+    content="Find lost belongings and report found items at Sai University."
+  >
+  <title>Campus Lost &amp; Found | Sai University</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="/js/app.js" defer></script>
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/" aria-label="CampusFind home">
+      <span class="brand-icon">C</span>
+      <span>Campus<span class="brand-accent">Find</span></span>
+    </a>
+
+    <nav aria-label="Main navigation">
+      <a class="nav-link active" href="/">Home</a>
+      <a class="nav-link" href="#listings">Browse Items</a>
+      <a class="nav-link" href="#report">Report an Item</a>
+    </nav>
+
+    <a class="header-button" href="#report">+ Report Item</a>
+  </header>
+
+  <main>
+    <section class="hero">
+      <p class="eyebrow">SAI UNIVERSITY · CAMPUS COMMUNITY</p>
+      <h1>Lost something?<br><span>Let's find it.</span></h1>
+      <p class="hero-description">
+        A missing belonging can turn up here. Browse reported items
+        or help someone reconnect with what they've lost.
+      </p>
+
+      <div class="hero-actions">
+        <a class="button button-primary" href="#listings">Browse Items</a>
+        <a class="button button-secondary" href="#report">Report an Item</a>
+      </div>
+
+      <div class="trust-note">
+        <span class="status-dot"></span>
+        Built for the Sai University campus community
+      </div>
+    </section>
+
+    <section class="listings section" id="listings">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">COMMUNITY LISTINGS</p>
+          <h2>Recent items</h2>
+          <p class="muted">
+            Browse lost and found belongings reported on campus.
+          </p>
+        </div>
+        <span class="item-count" id="item-count" aria-live="polite">
+          Loading items...
+        </span>
+      </div>
+
+      <div class="search-panel">
+        <label class="search-box">
+          <span aria-hidden="true">⌕</span>
+          <input
+            type="search"
+            id="search-input"
+            placeholder="Search by item name or description..."
+            aria-label="Search items"
+          >
+        </label>
+
+        <select id="type-filter" aria-label="Filter by item type">
+          <option value="">All items</option>
+          <option value="lost">Lost items</option>
+          <option value="found">Found items</option>
+        </select>
+
+        <select id="category-filter" aria-label="Filter by category">
+          <option value="">All categories</option>
+          <option value="electronics">Electronics</option>
+          <option value="identification">Identification</option>
+          <option value="books">Books</option>
+          <option value="clothing">Clothing</option>
+          <option value="accessories">Accessories</option>
+          <option value="stationery">Stationery</option>
+          <option value="other">Other</option>
+        </select>
+
+        <select id="sort-filter" aria-label="Sort items">
+          <option value="newest">Newest first</option>
+          <option value="oldest">Oldest first</option>
+          <option value="title">Title (A–Z)</option>
+        </select>
+      </div>
+
+      <div class="item-grid" id="item-grid" aria-live="polite">
+        <p class="loading-message">Connecting to campus listings...</p>
+      </div>
+
+      <p class="error-message" id="error-message" role="alert" hidden></p>
+
+      <nav class="pagination" id="pagination" aria-label="Item pages">
+        <button
+          type="button"
+          id="previous-page"
+          class="page-button"
+          disabled
+        >
+          ← Previous
+        </button>
+
+        <span id="page-info" aria-live="polite">Page 1</span>
+
+        <button
+          type="button"
+          id="next-page"
+          class="page-button"
+          disabled
+        >
+          Next →
+        </button>
+      </nav>
+    </section>
+
+    <section class="report-section section" id="report">
+      <div class="report-intro">
+        <p class="eyebrow">HELP THE COMMUNITY</p>
+        <h2>Lost something?<br>Found something?</h2>
+        <p class="muted">
+          Share the details below to help reunite lost belongings
+          with their owners.
+        </p>
+      </div>
+
+      <form id="report-form" class="report-form">
+        <h3>Report an item</h3>
+        <p class="form-description">Fields marked * are required.</p>
+
+        <div class="form-group">
+          <label for="item-title">Item name *</label>
+          <input
+            type="text"
+            id="item-title"
+            name="title"
+            placeholder="e.g. Black wireless headphones"
+            minlength="2"
+            maxlength="100"
+            required
+          >
+        </div>
+
+        <div class="form-group">
+          <label for="item-type">Report type *</label>
+          <select id="item-type" name="type" required>
+            <option value="">Select report type</option>
+            <option value="lost">I lost this item</option>
+            <option value="found">I found this item</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="item-category">Category *</label>
+          <select id="item-category" name="category" required>
+            <option value="">Select a category</option>
+            <option value="electronics">Electronics</option>
+            <option value="identification">Identification</option>
+            <option value="books">Books</option>
+            <option value="clothing">Clothing</option>
+            <option value="accessories">Accessories</option>
+            <option value="stationery">Stationery</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="item-description">Description *</label>
+          <textarea
+            id="item-description"
+            name="description"
+            rows="4"
+            minlength="10"
+            maxlength="2000"
+            placeholder="Describe the item and identifying details..."
+            required
+          ></textarea>
+        </div>
+
+        <div class="form-group">
+          <label for="item-location">Campus location *</label>
+          <input
+            type="text"
+            id="item-location"
+            name="campusLocation"
+            maxlength="150"
+            placeholder="e.g. Library, second floor"
+            required
+          >
+        </div>
+
+        <div class="form-group">
+          <label for="item-date">Date lost or found *</label>
+          <input
+            type="date"
+            id="item-date"
+            name="dateOccurred"
+            required
+          >
+        </div>
+
+        <div class="form-group">
+          <label for="contact-name">Your name *</label>
+          <input
+            type="text"
+            id="contact-name"
+            name="contactName"
+            maxlength="100"
+            autocomplete="name"
+            placeholder="Enter your name"
+            required
+          >
+        </div>
+
+        <div class="form-group">
+          <label for="contact-email">Contact email *</label>
+          <input
+            type="email"
+            id="contact-email"
+            name="contactEmail"
+            maxlength="254"
+            autocomplete="email"
+            placeholder="you@example.com"
+            required
+          >
+        </div>
+
+        <div class="form-group">
+          <label for="item-image">Image URL (optional)</label>
+          <input
+            type="url"
+            id="item-image"
+            name="imageUrl"
+            maxlength="2048"
+            placeholder="https://example.com/image.jpg"
+          >
+        </div>
+
+        <button
+          type="submit"
+          class="button button-primary"
+          id="submit-report"
+        >
+          Submit Report
+        </button>
+
+        <p
+          id="form-message"
+          class="form-message"
+          role="status"
+          aria-live="polite"
+          hidden
+        ></p>
+      </form>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <a class="brand footer-brand" href="/">
+      <span class="brand-icon">C</span>
+      <span>Campus<span class="brand-accent">Find</span></span>
+    </a>
+    <p>Made for the Sai University campus community.</p>
+    <p>Campus Lost &amp; Found · 2026–2027</p>
+  </footer>
+</body>
+</html>
