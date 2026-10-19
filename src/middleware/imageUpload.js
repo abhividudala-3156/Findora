@@ -9,7 +9,6 @@ import sharp from "sharp";
 import mongoose from "mongoose";
 import Item from "../models/Item.js";
 
-const uploadDirectory = path.resolve("uploads");
 const temporaryDirectory = path.resolve("tmp", "uploads");
 
 const allowedMimeTypes = new Set([
@@ -24,10 +23,7 @@ const outputFormats = {
   "image/webp": { format: "webp", extension: ".webp" },
 };
 
-await Promise.all([
-  mkdir(uploadDirectory, { recursive: true }),
-  mkdir(temporaryDirectory, { recursive: true }),
-]);
+await mkdir(temporaryDirectory, { recursive: true });
 
 const storage = multer.diskStorage({
   destination: (_req, _file, callback) => {
@@ -86,7 +82,7 @@ export async function validateUploadedImage(req, res, next) {
 
     const output = outputFormats[detectedType.mime];
     const filename = `${randomUUID()}${output.extension}`;
-    outputPath = path.join(uploadDirectory, filename);
+    outputPath = path.join(temporaryDirectory, `processed-${filename}`);
 
     await sharp(req.file.path, {
       limitInputPixels: 40_000_000,

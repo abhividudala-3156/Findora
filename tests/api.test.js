@@ -20,6 +20,11 @@ import User from "../src/models/User.js";
 import { sessionStore } from "../src/config/session.js";
 import { removeUploadedFile } from "../src/middleware/imageUpload.js";
 
+import {
+  setCloudinaryOperationsForTesting,
+  resetCloudinaryOperationsForTesting,
+} from "../src/services/cloudinaryImageService.js";
+
 let agent;
 let csrfToken;
 let currentUserId;
@@ -160,6 +165,16 @@ describe("Findora API", () => {
   // --------------------------------------------------
 
   before(async () => {
+     setCloudinaryOperationsForTesting({
+        upload: async () => ({
+          secure_url:
+            "https://res.cloudinary.com/findora-test/image/upload/v123/findora/items/test-image.jpg",
+          public_id: "findora/items/test-image",
+        }),
+        destroy: async () => ({
+          result: "ok",
+        }),
+      });
     const uri = process.env.MONGODB_URI;
 
     if (!uri) {
@@ -213,11 +228,15 @@ describe("Findora API", () => {
         await Item.deleteMany({});
         await User.deleteMany({});
       }
-    } finally {
+        } finally {
       try {
         await sessionStore.close();
       } finally {
-        await mongoose.disconnect();
+        try {
+          await mongoose.disconnect();
+        } finally {
+          resetCloudinaryOperationsForTesting();
+        }
       }
     }
   });
@@ -639,66 +658,53 @@ describe("Findora API", () => {
       currentUserId
     );
   });
-
   // --------------------------------------------------
   // IMAGE UPLOAD AND RETRIEVAL
   // --------------------------------------------------
-
   it("should upload and retrieve a valid JPEG image", async () => {
+
     const item = await createItem();
     const imageBuffer = await createTestImage();
+    const uploadResponse = await agent
+      .post(`/api/items/${item._id}/image`)
+      .set("x-csrf-token", csrfToken)
+      .attach("image", imageBuffer, {
+        filename: "test-image.jpg",
+        contentType: "image/jpeg",
+      });
 
-    let savedFilename;
+    assert.equal(
+      uploadResponse.status,
+      200,
+      JSON.stringify(uploadResponse.body)
+    );
 
-    try {
-      const uploadResponse = await agent
-        .post(`/api/items/${item._id}/image`)
-        .set("x-csrf-token", csrfToken)
-        .attach("image", imageBuffer, {
-          filename: "test-image.jpg",
-          contentType: "image/jpeg",
-        });
+    assert.equal(uploadResponse.body.success, true);
 
-      assert.equal(
-        uploadResponse.status,
-        200,
-        JSON.stringify(uploadResponse.body)
-      );
+    const expectedImageUrl =
+      "https://res.cloudinary.com/findora-test/image/upload/v123/findora/items/test-image.jpg";
 
-      assert.equal(uploadResponse.body.success, true);
+    assert.equal(
+      uploadResponse.body.data.imageUrl,
+      expectedImageUrl
+    );
 
-      assert.equal(
-        uploadResponse.body.data.imageUrl,
-        `/api/items/${item._id}/image`
-      );
+    const savedItem = await Item.findById(item._id);
 
-      const savedItem = await Item.findById(item._id);
+    assert.equal(savedItem.imageUrl, expectedImageUrl);
+    assert.equal(savedItem.imagePublicId, "findora/items/test-image");
+    assert.equal(savedItem.imageFilename, "");
 
-      assert.ok(savedItem.imageFilename);
-      assert.ok(savedItem.imageUrl);
+    const imageResponse = await request(app)
+      .get(`/api/items/${item._id}/image`);
 
-      savedFilename = savedItem.imageFilename;
-
-      const imageResponse = await request(app)
-        .get(`/api/items/${item._id}/image`);
-
-      assert.equal(imageResponse.status, 200);
-
-      assert.match(
-        imageResponse.headers["content-type"],
-        /image\/jpeg/
-      );
-
-      assert.ok(Buffer.isBuffer(imageResponse.body));
-      assert.ok(imageResponse.body.length > 0);
-    } finally {
-      if (savedFilename) {
-        await removeUploadedFile(
-          path.resolve("uploads", savedFilename)
-        );
-      }
-    }
+    assert.equal(imageResponse.status, 302);
+    assert.equal(
+      imageResponse.headers.location,
+      expectedImageUrl
+    );
   });
+
 
   it("should reject image uploads without authentication", async () => {
     const item = await createItem();

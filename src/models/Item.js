@@ -73,7 +73,11 @@ imageFilename: {
   trim: true,
   default: "",
 },
-
+imagePublicId: {
+  type: String,
+  trim: true,
+  default: "",
+},
     contactName: {
       type: String,
       required: [true, "Contact name is required"],

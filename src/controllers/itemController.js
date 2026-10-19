@@ -1,9 +1,15 @@
 
+
 import mongoose from "mongoose";
 import Item from "../models/Item.js";
 import path from "node:path";
 import { removeUploadedFile } from "../middleware/imageUpload.js";
 import { readFile } from "node:fs/promises";
+import {
+  uploadImageToCloudinary,
+  deleteCloudinaryImage,
+} from "../services/cloudinaryImageService.js";
+
 
 const CREATE_FIELDS = [
   "title",
@@ -277,6 +283,101 @@ export async function getItemById(req, res) {
   }
 }
 
+export async function getItemImage(req, res, next) {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid item ID",
+      });
+    }
+
+    const item = await Item.findById(id).select(
+      "imageFilename imagePublicId imageUrl"
+    );
+
+    if (!item) {
+      return res.status(404).json({
+        success: false,
+        message: "Item not found",
+      });
+    }
+
+    // Cloudinary-backed image: redirect to its HTTPS URL.
+    if (item.imagePublicId) {
+              if (
+          typeof item.imageUrl !== "string" ||
+          !item.imageUrl.startsWith("https://") ||
+          (() => {
+            try {
+              return new URL(item.imageUrl).hostname !== "res.cloudinary.com";
+            } catch {
+              return true;
+            }
+          })()
+        )
+      {
+        return res.status(500).json({
+          success: false,
+          message: "Stored Cloudinary image reference is invalid",
+        });
+      }
+
+      return res.redirect(302, item.imageUrl);
+    }
+
+    // Legacy image: continue serving the local file.
+    if (!item.imageFilename) {
+      return res.status(404).json({
+        success: false,
+        message: "This item has no uploaded image",
+      });
+    }
+
+    const allowedExtensions = new Set([".jpg", ".png", ".webp"]);
+    const extension = path.extname(item.imageFilename);
+
+    if (
+      path.basename(item.imageFilename) !== item.imageFilename ||
+      !allowedExtensions.has(extension)
+    ) {
+      return res.status(500).json({
+        success: false,
+        message: "Stored image reference is invalid",
+      });
+    }
+
+    const imagePath = path.resolve("uploads", item.imageFilename);
+    const imageBuffer = await readFile(imagePath);
+
+    const contentTypes = {
+      ".jpg": "image/jpeg",
+      ".png": "image/png",
+      ".webp": "image/webp",
+    };
+
+    res.set({
+      "Content-Type": contentTypes[extension],
+      "X-Content-Type-Options": "nosniff",
+      "Cache-Control": "private, no-cache",
+    });
+
+    return res.status(200).send(imageBuffer);
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      return res.status(404).json({
+        success: false,
+        message: "Image file not found",
+      });
+    }
+
+    return next(error);
+  }
+}
+
+
 // Update an item's details. Ownership cannot be changed by the request.
 export async function updateItem(req, res) {
   try {
@@ -326,7 +427,7 @@ export async function updateItem(req, res) {
   }
 }
 
-// Upload a processed image and associate it with the item.
+
 export async function uploadItemImage(req, res, next) {
   const processedImage = req.processedImage;
 
@@ -348,39 +449,71 @@ export async function uploadItemImage(req, res, next) {
     });
   }
 
-  const previousFilename = item.imageFilename;
+  let uploadedImage;
 
-  // Save the new image reference first.
   try {
-    item.imageFilename = processedImage.filename;
-    item.imageUrl = `/api/items/${item._id}/image`;
+    // Upload the validated, re-encoded image to Cloudinary.
+    uploadedImage = await uploadImageToCloudinary(processedImage.path);
+
+    const previousPublicId = item.imagePublicId;
+    const previousFilename = item.imageFilename;
+
+    // Save the persistent Cloudinary reference in MongoDB.
+    item.imageUrl = uploadedImage.imageUrl;
+    item.imagePublicId = uploadedImage.imagePublicId;
+    item.imageFilename = "";
 
     await item.save();
+
+    // Remove the previous Cloudinary image after the database save.
+    if (
+      previousPublicId &&
+      previousPublicId !== uploadedImage.imagePublicId
+    ) {
+      try {
+        await deleteCloudinaryImage(previousPublicId);
+      } catch (cleanupError) {
+        console.error(
+          "Previous Cloudinary image cleanup failed:",
+          cleanupError.message
+        );
+      }
+    }
+
+    // Remove a previous locally stored image, if one exists.
+    if (previousFilename) {
+      const previousPath = path.resolve("uploads", previousFilename);
+      await removeUploadedFile(previousPath);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Image uploaded successfully",
+      data: {
+        itemId: item._id,
+        imageUrl: item.imageUrl,
+      },
+    });
   } catch (error) {
-    // If saving fails, remove the newly processed image.
-    await removeUploadedFile(processedImage.path);
+    // If MongoDB saving fails after upload, avoid leaving an orphan image.
+    if (uploadedImage?.imagePublicId) {
+      try {
+        await deleteCloudinaryImage(uploadedImage.imagePublicId);
+      } catch (cleanupError) {
+        console.error(
+          "New Cloudinary image cleanup failed:",
+          cleanupError.message
+        );
+      }
+    }
+
     return next(error);
+  } finally {
+    // The processed image is temporary regardless of upload outcome.
+    await removeUploadedFile(processedImage.path);
   }
-
-  // The database now references the new image.
-  // Remove the previous image separately.
-  if (
-    previousFilename &&
-    previousFilename !== processedImage.filename
-  ) {
-    const previousPath = path.resolve("uploads", previousFilename);
-    await removeUploadedFile(previousPath);
-  }
-
-  return res.status(200).json({
-    success: true,
-    message: "Image uploaded successfully",
-    data: {
-      itemId: item._id,
-      imageUrl: item.imageUrl,
-    },
-  });
 }
+
 
 export async function deleteItem(req, res) {
   try {
@@ -407,7 +540,29 @@ export async function deleteItem(req, res) {
       });
     }
 
+    const imagePublicId = item.imagePublicId;
+    const imageFilename = item.imageFilename;
+
+    // Delete the database record first.
     await item.deleteOne();
+
+    // Cloudinary cleanup must not undo a successful item deletion.
+    if (imagePublicId) {
+      try {
+        await deleteCloudinaryImage(imagePublicId);
+      } catch (cleanupError) {
+        console.error(
+          "Cloudinary image cleanup failed after item deletion:",
+          cleanupError.message
+        );
+      }
+    }
+
+    // Clean up any legacy locally stored image.
+    if (imageFilename) {
+      const imagePath = path.resolve("uploads", imageFilename);
+      await removeUploadedFile(imagePath);
+    }
 
     return res.status(200).json({
       success: true,
@@ -415,74 +570,5 @@ export async function deleteItem(req, res) {
     });
   } catch (error) {
     return handleError(error, res);
-  }
-}
-
-// Serve an image through a controlled API route.
-export async function getItemImage(req, res, next) {
-  try {
-    const { id } = req.params;
-
-    if (!mongoose.isValidObjectId(id)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid item ID",
-      });
-    }
-
-    const item = await Item.findById(id).select("imageFilename");
-
-    if (!item) {
-      return res.status(404).json({
-        success: false,
-        message: "Item not found",
-      });
-    }
-
-    if (!item.imageFilename) {
-      return res.status(404).json({
-        success: false,
-        message: "This item has no image",
-      });
-    }
-
-    const allowedExtensions = new Set([".jpg", ".png", ".webp"]);
-    const extension = path.extname(item.imageFilename);
-
-    if (
-      path.basename(item.imageFilename) !== item.imageFilename ||
-      !allowedExtensions.has(extension)
-    ) {
-      return res.status(500).json({
-        success: false,
-        message: "Stored image reference is invalid",
-      });
-    }
-
-    const imagePath = path.resolve("uploads", item.imageFilename);
-    const imageBuffer = await readFile(imagePath);
-
-    const contentTypes = {
-      ".jpg": "image/jpeg",
-      ".png": "image/png",
-      ".webp": "image/webp",
-    };
-
-    res.set({
-      "Content-Type": contentTypes[extension],
-      "X-Content-Type-Options": "nosniff",
-      "Cache-Control": "private, no-cache",
-    });
-
-    return res.status(200).send(imageBuffer);
-  } catch (error) {
-    if (error.code === "ENOENT") {
-      return res.status(404).json({
-        success: false,
-        message: "Image file not found",
-      });
-    }
-
-    return next(error);
   }
 }
