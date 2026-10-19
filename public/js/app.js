@@ -22,6 +22,25 @@ const formMessage = document.getElementById("form-message");
 const submitButton = document.getElementById("submit-report");
 const dateInput = document.getElementById("item-date");
 
+// Authentication elements
+const authSection = document.getElementById("auth-section");
+const authForm = document.getElementById("auth-form");
+const authTitle = document.getElementById("auth-title");
+const authDescription = document.getElementById("auth-description");
+const authNameGroup = document.getElementById("auth-name-group");
+const authNameInput = document.getElementById("auth-name");
+const authEmailInput = document.getElementById("auth-email");
+const authPasswordInput = document.getElementById("auth-password");
+const authSubmitButton = document.getElementById("auth-submit");
+const authMessage = document.getElementById("auth-message");
+const loginTab = document.getElementById("login-tab");
+const registerTab = document.getElementById("register-tab");
+const openAuthButton = document.getElementById("open-auth");
+const closeAuthButton = document.getElementById("close-auth");
+const userPanel = document.getElementById("user-panel");
+const currentUserName = document.getElementById("current-user-name");
+const logoutButton = document.getElementById("logout-button");
+
 // ==========================================
 // 2. APPLICATION STATE
 // ==========================================
@@ -32,7 +51,13 @@ let totalPages = 0;
 let searchTimer;
 let currentRequest = null;
 
-// Prevent choosing a future date in the browser.
+let currentUser = null;
+let authMode = "login";
+
+// ==========================================
+// 3. DATE INPUT
+// ==========================================
+
 function getLocalDateString() {
   const now = new Date();
   const year = now.getFullYear();
@@ -42,23 +67,356 @@ function getLocalDateString() {
   return `${year}-${month}-${day}`;
 }
 
-dateInput.max = getLocalDateString();
+if (dateInput) {
+  dateInput.max = getLocalDateString();
+}
 
 // ==========================================
-// 3. SAFE HTML ELEMENT CREATION
+// 4. SAFE HTML ELEMENT CREATION
 // ==========================================
 
 function createTextElement(tag, className, text) {
   const element = document.createElement(tag);
-
   element.className = className;
   element.textContent = text;
-
   return element;
 }
 
 // ==========================================
-// 4. DATE FORMATTING
+// 5. API RESPONSE HELPERS
+// ==========================================
+
+async function readJsonResponse(response) {
+  let result;
+
+  try {
+    result = await response.json();
+  } catch {
+    throw new Error("The server returned an invalid response.");
+  }
+
+  if (!response.ok || result.success !== true) {
+    const error = new Error(
+      result.message || `Request failed (${response.status}).`
+    );
+
+    error.status = response.status;
+    throw error;
+  }
+
+  return result;
+}
+
+async function getCsrfToken() {
+  const response = await fetch("/api/auth/csrf-token", {
+    method: "GET",
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json"
+    },
+    cache: "no-store"
+  });
+
+  const result = await readJsonResponse(response);
+
+  if (
+    typeof result.csrfToken !== "string" ||
+    result.csrfToken.length === 0
+  ) {
+    throw new Error("The server did not provide a CSRF token.");
+  }
+
+  return result.csrfToken;
+}
+
+async function postJson(url, data) {
+  // Fetch a fresh token for every state-changing request.
+  const csrfToken = await getCsrfToken();
+
+  const response = await fetch(url, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      "x-csrf-token": csrfToken
+    },
+    body: JSON.stringify(data)
+  });
+
+  return readJsonResponse(response);
+}
+
+// ==========================================
+// 6. MESSAGE HELPERS
+// ==========================================
+
+function showMessage(element, message, type = "") {
+  if (!element) {
+    return;
+  }
+
+  element.textContent = message;
+  element.className = "form-message";
+
+  if (type) {
+    element.classList.add(type);
+  }
+
+  element.hidden = false;
+}
+
+function hideMessage(element) {
+  if (!element) {
+    return;
+  }
+
+  element.textContent = "";
+  element.hidden = true;
+  element.className = "form-message";
+}
+
+// ==========================================
+// 7. AUTHENTICATION INTERFACE
+// ==========================================
+
+function updateAuthenticationUI() {
+  if (currentUser) {
+    openAuthButton.hidden = true;
+    userPanel.hidden = false;
+
+    currentUserName.textContent =
+      `Welcome, ${currentUser.name}`;
+
+    // Only authenticated users can submit reports.
+    submitButton.disabled = false;
+  } else {
+    openAuthButton.hidden = false;
+    userPanel.hidden = true;
+
+    currentUserName.textContent = "";
+
+    // Do not permanently disable the report button:
+    // clicking it will open the login interface.
+    submitButton.disabled = false;
+  }
+}
+
+function showAuthSection() {
+  authSection.hidden = false;
+
+  authSection.scrollIntoView({
+    behavior: "smooth",
+    block: "start"
+  });
+}
+
+function hideAuthSection() {
+  authSection.hidden = true;
+  hideMessage(authMessage);
+}
+
+function setAuthMode(mode) {
+  authMode = mode === "register" ? "register" : "login";
+
+  const registering = authMode === "register";
+
+  authTitle.textContent = registering
+    ? "Create your Findora account"
+    : "Welcome to Findora";
+
+  authDescription.textContent = registering
+    ? "Register to report lost and found campus items."
+    : "Sign in to report lost or found items.";
+
+  authNameGroup.hidden = !registering;
+  authNameInput.required = registering;
+
+  loginTab.classList.toggle("active", !registering);
+  registerTab.classList.toggle("active", registering);
+
+  loginTab.setAttribute("aria-pressed", String(!registering));
+  registerTab.setAttribute("aria-pressed", String(registering));
+
+  authSubmitButton.textContent = registering
+    ? "Create Account"
+    : "Login";
+
+  authPasswordInput.autocomplete = registering
+    ? "new-password"
+    : "current-password";
+
+  hideMessage(authMessage);
+}
+
+openAuthButton.addEventListener("click", () => {
+  setAuthMode("login");
+  showAuthSection();
+});
+
+closeAuthButton.addEventListener("click", hideAuthSection);
+
+loginTab.addEventListener("click", () => {
+  setAuthMode("login");
+});
+
+registerTab.addEventListener("click", () => {
+  setAuthMode("register");
+});
+
+// ==========================================
+// 8. LOGIN AND REGISTRATION
+// ==========================================
+
+authForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  if (!authForm.checkValidity()) {
+    authForm.reportValidity();
+    return;
+  }
+
+  const registering = authMode === "register";
+
+  const email = authEmailInput.value.trim();
+  const password = authPasswordInput.value;
+
+  const payload = {
+    email,
+    password
+  };
+
+  if (registering) {
+    payload.name = authNameInput.value.trim();
+  }
+
+  authSubmitButton.disabled = true;
+  authSubmitButton.textContent = registering
+    ? "Creating account..."
+    : "Signing in...";
+
+  hideMessage(authMessage);
+
+  try {
+    if (registering) {
+      await postJson("/api/auth/register", payload);
+
+      // Registration does not automatically sign the user in.
+      authPasswordInput.value = "";
+
+      setAuthMode("login");
+      authEmailInput.value = email;
+
+      showMessage(
+        authMessage,
+        "Account created successfully. Please log in.",
+        "success"
+      );
+
+      return;
+    }
+
+    const result = await postJson("/api/auth/login", payload);
+
+    currentUser = result.user;
+
+    updateAuthenticationUI();
+    hideAuthSection();
+
+    authForm.reset();
+    setAuthMode("login");
+
+    showMessage(
+      formMessage,
+      "You are now logged in and can report an item.",
+      "success"
+    );
+
+    // The login endpoint regenerates the session.
+    // postJson fetches a fresh CSRF token for the next POST.
+  } catch (error) {
+    const message = error.status === 429
+      ? "Too many attempts. Please wait before trying again."
+      : error.message || "Authentication failed. Please try again.";
+
+    showMessage(authMessage, message, "error");
+
+    console.error("Authentication failed:", error);
+  } finally {
+    authSubmitButton.disabled = false;
+
+    authSubmitButton.textContent =
+      authMode === "register" ? "Create Account" : "Login";
+  }
+});
+
+// ==========================================
+// 9. LOGOUT
+// ==========================================
+
+logoutButton.addEventListener("click", async () => {
+  logoutButton.disabled = true;
+  logoutButton.textContent = "Logging out...";
+
+  try {
+    await postJson("/api/auth/logout", {});
+
+    currentUser = null;
+    updateAuthenticationUI();
+
+    showMessage(
+      formMessage,
+      "You have been logged out.",
+      "success"
+    );
+  } catch (error) {
+    showMessage(
+      formMessage,
+      error.message || "Logout failed. Please try again.",
+      "error"
+    );
+
+    console.error("Logout failed:", error);
+  } finally {
+    logoutButton.disabled = false;
+    logoutButton.textContent = "Logout";
+  }
+});
+
+// ==========================================
+// 10. RESTORE THE CURRENT SESSION
+// ==========================================
+
+async function restoreSession() {
+  try {
+    const response = await fetch("/api/auth/me", {
+      method: "GET",
+      credentials: "same-origin",
+      headers: {
+        Accept: "application/json"
+      },
+      cache: "no-store"
+    });
+
+    if (response.status === 401) {
+      currentUser = null;
+      updateAuthenticationUI();
+      return;
+    }
+
+    const result = await readJsonResponse(response);
+
+    currentUser = result.user;
+    updateAuthenticationUI();
+  } catch (error) {
+    // A temporary session-check failure should not prevent
+    // public listings from loading.
+    console.error("Could not restore the session:", error);
+  }
+}
+
+// ==========================================
+// 11. DATE FORMATTING
 // ==========================================
 
 function formatDate(dateValue) {
@@ -80,7 +438,7 @@ function formatDate(dateValue) {
 }
 
 // ==========================================
-// 5. CREATE AN ITEM CARD
+// 12. CREATE AN ITEM CARD
 // ==========================================
 
 function createItemCard(item) {
@@ -147,7 +505,7 @@ function createItemCard(item) {
 }
 
 // ==========================================
-// 6. DISPLAY ITEMS AND TOTAL COUNT
+// 13. DISPLAY ITEMS
 // ==========================================
 
 function displayItems(items, totalItems) {
@@ -178,18 +536,16 @@ function displayItems(items, totalItems) {
 }
 
 // ==========================================
-// 7. UPDATE PAGINATION CONTROLS
+// 14. PAGINATION
 // ==========================================
 
 function updatePagination(pagination) {
   currentPage = pagination.page;
   totalPages = pagination.totalPages;
 
-  if (totalPages > 0) {
-    pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
-  } else {
-    pageInfo.textContent = "No pages";
-  }
+  pageInfo.textContent = totalPages > 0
+    ? `Page ${currentPage} of ${totalPages}`
+    : "No pages";
 
   previousPageButton.disabled = currentPage <= 1;
   nextPageButton.disabled =
@@ -197,11 +553,10 @@ function updatePagination(pagination) {
 }
 
 // ==========================================
-// 8. LOAD ITEMS FROM THE BACKEND
+// 15. LOAD ITEMS
 // ==========================================
 
 async function loadItems() {
-  // Cancel an earlier request if a newer one starts.
   if (currentRequest) {
     currentRequest.abort();
   }
@@ -216,21 +571,10 @@ async function loadItems() {
   const category = categoryFilter.value;
   const sort = sortFilter.value;
 
-  if (search) {
-    params.set("search", search);
-  }
-
-  if (type) {
-    params.set("type", type);
-  }
-
-  if (category) {
-    params.set("category", category);
-  }
-
-  if (sort) {
-    params.set("sort", sort);
-  }
+  if (search) params.set("search", search);
+  if (type) params.set("type", type);
+  if (category) params.set("category", category);
+  if (sort) params.set("sort", sort);
 
   params.set("page", String(currentPage));
   params.set("limit", String(pageLimit));
@@ -247,34 +591,26 @@ async function loadItems() {
 
   try {
     const response = await fetch(`/api/items?${params.toString()}`, {
+      method: "GET",
+      credentials: "same-origin",
+      headers: {
+        Accept: "application/json"
+      },
       signal: controller.signal
     });
 
-    const result = await response.json();
-
-    if (!response.ok || result.success !== true) {
-      throw new Error(
-        result.message || "Unable to load campus items."
-      );
-    }
+    const result = await readJsonResponse(response);
 
     if (!Array.isArray(result.data) || !result.pagination) {
       throw new Error("The server returned an unexpected response.");
     }
 
-    // Ignore stale responses from cancelled requests.
     if (currentRequest !== controller) {
       return;
     }
 
-    const pagination = result.pagination;
-
-    displayItems(
-      result.data,
-      pagination.totalItems
-    );
-
-    updatePagination(pagination);
+    displayItems(result.data, result.pagination.totalItems);
+    updatePagination(result.pagination);
   } catch (error) {
     if (error.name === "AbortError") {
       return;
@@ -304,7 +640,7 @@ async function loadItems() {
 }
 
 // ==========================================
-// 9. SEARCH AND FILTER EVENTS
+// 16. SEARCH AND FILTER EVENTS
 // ==========================================
 
 function resetPageAndLoadItems() {
@@ -321,13 +657,11 @@ searchInput.addEventListener("input", () => {
 });
 
 typeFilter.addEventListener("change", resetPageAndLoadItems);
-
 categoryFilter.addEventListener("change", resetPageAndLoadItems);
-
 sortFilter.addEventListener("change", resetPageAndLoadItems);
 
 // ==========================================
-// 10. PAGINATION EVENTS
+// 17. PAGINATION EVENTS
 // ==========================================
 
 previousPageButton.addEventListener("click", () => {
@@ -345,11 +679,24 @@ nextPageButton.addEventListener("click", () => {
 });
 
 // ==========================================
-// 11. REPORT FORM SUBMISSION
+// 18. REPORT FORM SUBMISSION
 // ==========================================
 
 reportForm.addEventListener("submit", async (event) => {
   event.preventDefault();
+
+  if (!currentUser) {
+    setAuthMode("login");
+    showAuthSection();
+
+    showMessage(
+      authMessage,
+      "Please log in before submitting an item report.",
+      "error"
+    );
+
+    return;
+  }
 
   if (!reportForm.checkValidity()) {
     reportForm.reportValidity();
@@ -360,41 +707,29 @@ reportForm.addEventListener("submit", async (event) => {
   const itemData = Object.fromEntries(formData.entries());
 
   // Normalize the optional image URL.
-  itemData.imageUrl = itemData.imageUrl.trim();
+  itemData.imageUrl = (itemData.imageUrl || "").trim();
 
   submitButton.disabled = true;
   submitButton.textContent = "Submitting...";
 
-  formMessage.hidden = true;
-  formMessage.className = "form-message";
+  hideMessage(formMessage);
 
   try {
-    const response = await fetch("/api/items", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(itemData)
-    });
+    await postJson("/api/items", itemData);
 
-    const result = await response.json();
-
-    if (!response.ok || result.success !== true) {
-      throw new Error(
-        result.message || "Unable to submit your report."
-      );
-    }
-
-    formMessage.textContent =
-      "Your report was submitted successfully!";
-
-    formMessage.classList.add("success");
-    formMessage.hidden = false;
+    showMessage(
+      formMessage,
+      "Your report was submitted successfully!",
+      "success"
+    );
 
     reportForm.reset();
 
-    // Restore the default sort and clear filters so the new
-    // report can appear in the refreshed listing.
+    // Preserve the current date restriction after reset.
+    if (dateInput) {
+      dateInput.max = getLocalDateString();
+    }
+
     searchInput.value = "";
     typeFilter.value = "";
     categoryFilter.value = "";
@@ -403,11 +738,25 @@ reportForm.addEventListener("submit", async (event) => {
 
     await loadItems();
   } catch (error) {
-    formMessage.textContent =
-      error.message || "Something went wrong. Please try again.";
+    if (error.status === 401) {
+      currentUser = null;
+      updateAuthenticationUI();
 
-    formMessage.classList.add("error");
-    formMessage.hidden = false;
+      setAuthMode("login");
+      showAuthSection();
+
+      showMessage(
+        authMessage,
+        "Your session may have expired. Please log in again.",
+        "error"
+      );
+    } else {
+      showMessage(
+        formMessage,
+        error.message || "Something went wrong. Please try again.",
+        "error"
+      );
+    }
 
     console.error("Report submission failed:", error);
   } finally {
@@ -417,7 +766,18 @@ reportForm.addEventListener("submit", async (event) => {
 });
 
 // ==========================================
-// 12. INITIALIZE THE PAGE
+// 19. INITIALIZE THE PAGE
 // ==========================================
 
-loadItems();
+async function initializePage() {
+  updateAuthenticationUI();
+
+  // Load public listings immediately; session restoration
+  // happens alongside it.
+  const sessionCheck = restoreSession();
+  const itemLoad = loadItems();
+
+  await Promise.allSettled([sessionCheck, itemLoad]);
+}
+
+initializePage();

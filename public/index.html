@@ -269,10 +269,88 @@
       <a class="nav-link" href="#report">Report an Item</a>
     </nav>
 
-    <a class="header-button" href="#report">+ Report Item</a>
+    <div class="header-actions">
+  <a class="header-button" href="#report">+ Report Item</a>
+  <button type="button" class="auth-button" id="open-auth">
+    Login / Register
+  </button>
+  <div id="user-panel" hidden>
+    <span id="current-user-name"></span>
+    <button type="button" class="auth-button" id="logout-button">
+      Logout
+    </button>
+  </div>
+</div>
   </header>
 
   <main>
+    <section class="auth-section section" id="auth-section" hidden>
+  <div class="auth-card">
+    <h2 id="auth-title">Welcome to Findora</h2>
+    <p class="muted" id="auth-description">
+      Sign in to report lost or found items.
+    </p>
+
+    <div class="auth-tabs">
+      <button type="button" id="login-tab" class="auth-tab active">
+        Login
+      </button>
+      <button type="button" id="register-tab" class="auth-tab">
+        Register
+      </button>
+    </div>
+
+    <form id="auth-form">
+      <div class="form-group" id="auth-name-group" hidden>
+        <label for="auth-name">Full name</label>
+        <input
+          type="text"
+          id="auth-name"
+          name="name"
+          minlength="2"
+          maxlength="80"
+          autocomplete="name"
+        >
+      </div>
+
+      <div class="form-group">
+        <label for="auth-email">Email address</label>
+        <input
+          type="email"
+          id="auth-email"
+          name="email"
+          maxlength="254"
+          autocomplete="email"
+          required
+        >
+      </div>
+
+      <div class="form-group">
+        <label for="auth-password">Password</label>
+        <input
+          type="password"
+          id="auth-password"
+          name="password"
+          minlength="8"
+          maxlength="72"
+          autocomplete="current-password"
+          required
+        >
+      </div>
+
+      <button type="submit" class="button button-primary" id="auth-submit">
+        Login
+      </button>
+
+      <p id="auth-message" class="form-message" role="status"
+         aria-live="polite" hidden></p>
+    </form>
+
+    <button type="button" class="auth-cancel" id="close-auth">
+      Cancel
+    </button>
+  </div>
+</section>
     <section class="hero">
       <p class="eyebrow">SAI UNIVERSITY · CAMPUS COMMUNITY</p>
       <h1>Lost something?<br><span>Let's find it.</span></h1>
