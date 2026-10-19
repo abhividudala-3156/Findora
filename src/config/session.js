@@ -3,6 +3,8 @@ import session from "express-session";
 import MongoStore from "connect-mongo";
 
 const sessionSecret = process.env.SESSION_SECRET;
+const mongoUrl = process.env.MONGODB_URI;
+const isProduction = process.env.NODE_ENV === "production";
 
 if (!sessionSecret || sessionSecret.length < 32) {
   throw new Error(
@@ -10,11 +12,15 @@ if (!sessionSecret || sessionSecret.length < 32) {
   );
 }
 
+if (!mongoUrl) {
+  throw new Error("MONGODB_URI must be configured.");
+}
+
 const sessionStore = MongoStore.create({
-  mongoUrl: process.env.MONGODB_URI,
+  mongoUrl,
   collectionName: "sessions",
   ttl: 8 * 60 * 60,
-  autoRemove: "native"
+  autoRemove: "native",
 });
 
 const sessionMiddleware = session({
@@ -26,10 +32,11 @@ const sessionMiddleware = session({
   rolling: false,
   cookie: {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: isProduction,
     sameSite: "lax",
-    maxAge: 8 * 60 * 60 * 1000
-  }
+    maxAge: 8 * 60 * 60 * 1000,
+    path: "/",
+  },
 });
 
 export { sessionStore };

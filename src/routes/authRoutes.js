@@ -1,5 +1,6 @@
 
 import express from "express";
+
 import {
   registerUser,
   loginUser,
@@ -8,11 +9,27 @@ import {
   getCsrfToken,
 } from "../controllers/authController.js";
 
+import {
+  loginRateLimiter,
+  registrationRateLimiter,
+} from "../middleware/authRateLimit.js";
+
 const router = express.Router();
 
 router.get("/csrf-token", getCsrfToken);
-router.post("/register", registerUser);
-router.post("/login", loginUser);
+
+router.post(
+  "/register",
+  registrationRateLimiter,
+  registerUser
+);
+
+router.post(
+  "/login",
+  loginRateLimiter,
+  loginUser
+);
+
 router.post("/logout", logoutUser);
 router.get("/me", getCurrentUser);
 

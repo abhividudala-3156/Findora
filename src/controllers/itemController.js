@@ -1,10 +1,8 @@
 
 import mongoose from "mongoose";
 import Item from "../models/Item.js";
-
 import path from "node:path";
 import { removeUploadedFile } from "../middleware/imageUpload.js";
-
 import { readFile } from "node:fs/promises";
 
 const CREATE_FIELDS = [
@@ -43,8 +41,8 @@ function ownsItem(item, user) {
 
   return Boolean(
     ownerId &&
-    userId &&
-    ownerId.toString() === userId.toString()
+      userId &&
+      ownerId.toString() === userId.toString()
   );
 }
 
@@ -133,6 +131,7 @@ export async function getItems(req, res) {
     }
 
     const validTypes = ["lost", "found"];
+
     const validCategories = [
       "electronics",
       "identification",
@@ -142,6 +141,7 @@ export async function getItems(req, res) {
       "stationery",
       "other",
     ];
+
     const validStatuses = [
       "active",
       "claimed",
@@ -190,7 +190,12 @@ export async function getItems(req, res) {
       const escapedSearch = escapeRegex(String(search));
 
       filter.$or = [
-        { title: { $regex: escapedSearch, $options: "i" } },
+        {
+          title: {
+            $regex: escapedSearch,
+            $options: "i",
+          },
+        },
         {
           description: {
             $regex: escapedSearch,
@@ -272,6 +277,7 @@ export async function getItemById(req, res) {
   }
 }
 
+// Update an item's details. Ownership cannot be changed by the request.
 export async function updateItem(req, res) {
   try {
     if (!mongoose.isValidObjectId(req.params.id)) {
@@ -320,6 +326,62 @@ export async function updateItem(req, res) {
   }
 }
 
+// Upload a processed image and associate it with the item.
+export async function uploadItemImage(req, res, next) {
+  const processedImage = req.processedImage;
+
+  if (!processedImage) {
+    return res.status(400).json({
+      success: false,
+      message: "No processed image is available",
+    });
+  }
+
+  const item = req.item;
+
+  if (!item) {
+    await removeUploadedFile(processedImage.path);
+
+    return res.status(404).json({
+      success: false,
+      message: "Item not found",
+    });
+  }
+
+  const previousFilename = item.imageFilename;
+
+  // Save the new image reference first.
+  try {
+    item.imageFilename = processedImage.filename;
+    item.imageUrl = `/api/items/${item._id}/image`;
+
+    await item.save();
+  } catch (error) {
+    // If saving fails, remove the newly processed image.
+    await removeUploadedFile(processedImage.path);
+    return next(error);
+  }
+
+  // The database now references the new image.
+  // Remove the previous image separately.
+  if (
+    previousFilename &&
+    previousFilename !== processedImage.filename
+  ) {
+    const previousPath = path.resolve("uploads", previousFilename);
+    await removeUploadedFile(previousPath);
+  }
+
+  return res.status(200).json({
+    success: true,
+    message: "Image uploaded successfully",
+    data: {
+      itemId: item._id,
+      imageUrl: item.imageUrl,
+    },
+  });
+}
+
 export async function deleteItem(req, res) {
   try {
     if (!mongoose.isValidObjectId(req.params.id)) {
@@ -356,54 +418,7 @@ export async function deleteItem(req, res) {
   }
 }
 
-export async function uploadItemImage(req, res, next) {
-  const processedImage = req.processedImage;
-
-  if (!processedImage) {
-    return res.status(400).json({
-      success: false,
-      message: "No processed image is available",
-    });
-  }
-
-  const item = req.item;
-
-  if (!item) {
-    await removeUploadedFile(processedImage.path);
-
-    return res.status(404).json({
-      success: false,
-      message: "Item not found",
-    });
-  }
-
-  const previousFilename = item.imageFilename;
-
-  try {
-    item.imageFilename = processedImage.filename;
-    item.imageUrl = `/api/items/${item._id}/image`;
-
-    await item.save();
-
-    if (previousFilename && previousFilename !== processedImage.filename) {
-      const previousPath = path.resolve("uploads", previousFilename);
-      await removeUploadedFile(previousPath);
-    }
-
-    return res.status(200).json({
-      success: true,
-      message: "Image uploaded successfully",
-      data: {
-        itemId: item._id,
-        imageUrl: item.imageUrl,
-      },
-    });
-  } catch (error) {
-    await removeUploadedFile(processedImage.path);
-    return next(error);
-  }
-}
-
+// Serve an image through a controlled API route.
 export async function getItemImage(req, res, next) {
   try {
     const { id } = req.params;
