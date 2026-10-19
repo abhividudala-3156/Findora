@@ -7,7 +7,17 @@ import {
   getItemById,
   updateItem,
   deleteItem,
+  getItemImage,
+  uploadItemImage,
 } from "../controllers/itemController.js";
+
+
+import upload, {
+  authorizeItemImageUpload,
+  validateUploadedImage,
+  handleImageUploadError,
+} from "../middleware/imageUpload.js";
+
 
 import { requireAuth } from "../middleware/auth.js";
 
@@ -21,5 +31,17 @@ router.get("/:id", getItemById);
 router.post("/", requireAuth, createItem);
 router.patch("/:id", requireAuth, updateItem);
 router.delete("/:id", requireAuth, deleteItem);
+
+router.get("/:id/image", getItemImage);
+
+router.post(
+  "/:id/image",
+  requireAuth,
+  authorizeItemImageUpload,
+  upload.single("image"),
+  validateUploadedImage,
+  uploadItemImage,
+  handleImageUploadError
+);
 
 export default router;

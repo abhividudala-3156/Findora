@@ -62,11 +62,17 @@ const itemSchema = new mongoose.Schema(
     },
 
     imageUrl: {
-      type: String,
-      trim: true,
-      maxlength: [2048, "Image URL cannot exceed 2048 characters"],
-      default: ""
-    },
+  type: String,
+  trim: true,
+  maxlength: 2048,
+  default: "",
+},
+
+imageFilename: {
+  type: String,
+  trim: true,
+  default: "",
+},
 
     contactName: {
       type: String,

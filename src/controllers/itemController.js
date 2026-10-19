@@ -2,6 +2,11 @@
 import mongoose from "mongoose";
 import Item from "../models/Item.js";
 
+import path from "node:path";
+import { removeUploadedFile } from "../middleware/imageUpload.js";
+
+import { readFile } from "node:fs/promises";
+
 const CREATE_FIELDS = [
   "title",
   "description",
@@ -348,5 +353,121 @@ export async function deleteItem(req, res) {
     });
   } catch (error) {
     return handleError(error, res);
+  }
+}
+
+export async function uploadItemImage(req, res, next) {
+  const processedImage = req.processedImage;
+
+  if (!processedImage) {
+    return res.status(400).json({
+      success: false,
+      message: "No processed image is available",
+    });
+  }
+
+  const item = req.item;
+
+  if (!item) {
+    await removeUploadedFile(processedImage.path);
+
+    return res.status(404).json({
+      success: false,
+      message: "Item not found",
+    });
+  }
+
+  const previousFilename = item.imageFilename;
+
+  try {
+    item.imageFilename = processedImage.filename;
+    item.imageUrl = `/api/items/${item._id}/image`;
+
+    await item.save();
+
+    if (previousFilename && previousFilename !== processedImage.filename) {
+      const previousPath = path.resolve("uploads", previousFilename);
+      await removeUploadedFile(previousPath);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Image uploaded successfully",
+      data: {
+        itemId: item._id,
+        imageUrl: item.imageUrl,
+      },
+    });
+  } catch (error) {
+    await removeUploadedFile(processedImage.path);
+    return next(error);
+  }
+}
+
+export async function getItemImage(req, res, next) {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid item ID",
+      });
+    }
+
+    const item = await Item.findById(id).select("imageFilename");
+
+    if (!item) {
+      return res.status(404).json({
+        success: false,
+        message: "Item not found",
+      });
+    }
+
+    if (!item.imageFilename) {
+      return res.status(404).json({
+        success: false,
+        message: "This item has no image",
+      });
+    }
+
+    const allowedExtensions = new Set([".jpg", ".png", ".webp"]);
+    const extension = path.extname(item.imageFilename);
+
+    if (
+      path.basename(item.imageFilename) !== item.imageFilename ||
+      !allowedExtensions.has(extension)
+    ) {
+      return res.status(500).json({
+        success: false,
+        message: "Stored image reference is invalid",
+      });
+    }
+
+    const imagePath = path.resolve("uploads", item.imageFilename);
+    const imageBuffer = await readFile(imagePath);
+
+    const contentTypes = {
+      ".jpg": "image/jpeg",
+      ".png": "image/png",
+      ".webp": "image/webp",
+    };
+
+    res.set({
+      "Content-Type": contentTypes[extension],
+      "X-Content-Type-Options": "nosniff",
+      "Cache-Control": "private, no-cache",
+    });
+
+    return res.status(200).send(imageBuffer);
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      return res.status(404).json({
+        success: false,
+        message: "Image file not found",
+      });
+    }
+
+    return next(error);
   }
 }

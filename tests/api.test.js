@@ -10,16 +10,23 @@ import {
 import assert from "node:assert/strict";
 import request from "supertest";
 import mongoose from "mongoose";
+import sharp from "sharp";
+import path from "node:path";
 
 import app from "../src/app.js";
 import { connectDB } from "../src/config/database.js";
 import Item from "../src/models/Item.js";
 import User from "../src/models/User.js";
 import { sessionStore } from "../src/config/session.js";
+import { removeUploadedFile } from "../src/middleware/imageUpload.js";
 
 let agent;
 let csrfToken;
 let currentUserId;
+
+// --------------------------------------------------
+// TEST HELPERS
+// --------------------------------------------------
 
 function recentPastDate() {
   const date = new Date();
@@ -41,6 +48,19 @@ function createValidItem(overrides = {}) {
     contactEmail: "teststudent@example.com",
     ...overrides,
   };
+}
+
+async function createTestImage() {
+  return sharp({
+    create: {
+      width: 20,
+      height: 20,
+      channels: 3,
+      background: { r: 30, g: 100, b: 200 },
+    },
+  })
+    .jpeg()
+    .toBuffer();
 }
 
 // Create a session, register a user, and log in.
@@ -82,7 +102,8 @@ async function createLoggedInAgent(email) {
     `Login failed: ${JSON.stringify(response.body)}`
   );
 
-  // Login regenerates the session. Obtain a token for that session.
+  // Login regenerates the session.
+  // Obtain a CSRF token for the new session.
   response = await userAgent.get("/api/auth/csrf-token");
 
   assert.equal(response.status, 200);
@@ -129,7 +150,15 @@ async function createAnonymousAgent() {
   };
 }
 
+// --------------------------------------------------
+// API TEST SUITE
+// --------------------------------------------------
+
 describe("Findora API", () => {
+  // --------------------------------------------------
+  // DATABASE SETUP
+  // --------------------------------------------------
+
   before(async () => {
     const uri = process.env.MONGODB_URI;
 
@@ -172,11 +201,12 @@ describe("Findora API", () => {
 
     const meResponse = await agent.get("/api/auth/me");
 
-      assert.equal(meResponse.status, 200);
-      assert.ok(meResponse.body.user?.id);
-      currentUserId = meResponse.body.user.id.toString();
+    assert.equal(meResponse.status, 200);
+    assert.ok(meResponse.body.user?.id);
+
+    currentUserId = meResponse.body.user.id.toString();
   });
- 
+
   after(async () => {
     try {
       if (mongoose.connection.readyState === 1) {
@@ -209,6 +239,7 @@ describe("Findora API", () => {
     assert.equal(response.body.data.title, input.title);
     assert.equal(response.body.data.type, input.type);
     assert.ok(response.body.data.owner);
+
     assert.equal(
       response.body.data.owner.toString(),
       currentUserId.toString()
@@ -240,10 +271,12 @@ describe("Findora API", () => {
       );
 
     assert.equal(response.status, 201);
+
     assert.equal(
       response.body.data.owner.toString(),
       currentUserId
     );
+
     assert.notEqual(
       response.body.data.owner.toString(),
       anotherUserId
@@ -422,7 +455,9 @@ describe("Findora API", () => {
     assert.equal(response.body.success, true);
 
     assert.ok(
-      response.body.data.every((item) => item.type === "lost")
+      response.body.data.every(
+        (item) => item.type === "lost"
+      )
     );
   });
 
@@ -468,10 +503,12 @@ describe("Findora API", () => {
 
     assert.equal(response.status, 200);
     assert.equal(response.body.success, true);
+
     assert.equal(
       response.body.data.title,
       "Found blue campus notebook"
     );
+
     assert.equal(
       response.body.data.owner.toString(),
       currentUserId
@@ -507,6 +544,7 @@ describe("Findora API", () => {
     const unchangedItem = await Item.findById(item._id);
 
     assert.equal(unchangedItem.title, item.title);
+
     assert.equal(
       unchangedItem.owner.toString(),
       currentUserId
@@ -539,6 +577,7 @@ describe("Findora API", () => {
       });
 
     assert.equal(response.status, 200);
+
     assert.equal(
       response.body.data.owner.toString(),
       currentUserId
@@ -594,9 +633,186 @@ describe("Findora API", () => {
     const existingItem = await Item.findById(item._id);
 
     assert.ok(existingItem);
+
     assert.equal(
       existingItem.owner.toString(),
       currentUserId
     );
+  });
+
+  // --------------------------------------------------
+  // IMAGE UPLOAD AND RETRIEVAL
+  // --------------------------------------------------
+
+  it("should upload and retrieve a valid JPEG image", async () => {
+    const item = await createItem();
+    const imageBuffer = await createTestImage();
+
+    let savedFilename;
+
+    try {
+      const uploadResponse = await agent
+        .post(`/api/items/${item._id}/image`)
+        .set("x-csrf-token", csrfToken)
+        .attach("image", imageBuffer, {
+          filename: "test-image.jpg",
+          contentType: "image/jpeg",
+        });
+
+      assert.equal(
+        uploadResponse.status,
+        200,
+        JSON.stringify(uploadResponse.body)
+      );
+
+      assert.equal(uploadResponse.body.success, true);
+
+      assert.equal(
+        uploadResponse.body.data.imageUrl,
+        `/api/items/${item._id}/image`
+      );
+
+      const savedItem = await Item.findById(item._id);
+
+      assert.ok(savedItem.imageFilename);
+      assert.ok(savedItem.imageUrl);
+
+      savedFilename = savedItem.imageFilename;
+
+      const imageResponse = await request(app)
+        .get(`/api/items/${item._id}/image`);
+
+      assert.equal(imageResponse.status, 200);
+
+      assert.match(
+        imageResponse.headers["content-type"],
+        /image\/jpeg/
+      );
+
+      assert.ok(Buffer.isBuffer(imageResponse.body));
+      assert.ok(imageResponse.body.length > 0);
+    } finally {
+      if (savedFilename) {
+        await removeUploadedFile(
+          path.resolve("uploads", savedFilename)
+        );
+      }
+    }
+  });
+
+  it("should reject image uploads without authentication", async () => {
+    const item = await createItem();
+    const anonymous = await createAnonymousAgent();
+    const imageBuffer = await createTestImage();
+
+    const response = await anonymous.agent
+      .post(`/api/items/${item._id}/image`)
+      .set("x-csrf-token", anonymous.csrfToken)
+      .attach("image", imageBuffer, {
+        filename: "test-image.jpg",
+        contentType: "image/jpeg",
+      });
+
+    assert.equal(response.status, 401);
+    assert.equal(response.body.success, false);
+  });
+
+  it("should reject image uploads without a valid CSRF token", async () => {
+    const item = await createItem();
+    const imageBuffer = await createTestImage();
+
+    const response = await agent
+      .post(`/api/items/${item._id}/image`)
+      .attach("image", imageBuffer, {
+        filename: "test-image.jpg",
+        contentType: "image/jpeg",
+      });
+
+    assert.equal(response.status, 403);
+    assert.equal(response.body.success, false);
+  });
+
+  it("should prevent another user from uploading an item's image", async () => {
+    const item = await createItem();
+
+    const anotherUser = await createLoggedInAgent(
+      "image-owner-test@example.com"
+    );
+
+    const imageBuffer = await createTestImage();
+
+    const response = await anotherUser.agent
+      .post(`/api/items/${item._id}/image`)
+      .set("x-csrf-token", anotherUser.csrfToken)
+      .attach("image", imageBuffer, {
+        filename: "test-image.jpg",
+        contentType: "image/jpeg",
+      });
+
+    assert.equal(response.status, 403);
+    assert.equal(response.body.success, false);
+
+    const unchangedItem = await Item.findById(item._id);
+
+    assert.equal(unchangedItem.imageFilename, "");
+  });
+
+  it("should reject unsupported image MIME types", async () => {
+    const item = await createItem();
+
+    const response = await agent
+      .post(`/api/items/${item._id}/image`)
+      .set("x-csrf-token", csrfToken)
+      .attach("image", Buffer.from("not an image"), {
+        filename: "document.txt",
+        contentType: "text/plain",
+      });
+
+    assert.equal(response.status, 400);
+    assert.equal(response.body.success, false);
+  });
+
+  it("should reject a file that is not actually an image", async () => {
+    const item = await createItem();
+
+    const response = await agent
+      .post(`/api/items/${item._id}/image`)
+      .set("x-csrf-token", csrfToken)
+      .attach("image", Buffer.from("not a real JPEG image"), {
+        filename: "fake-image.jpg",
+        contentType: "image/jpeg",
+      });
+
+    assert.equal(response.status, 400);
+    assert.equal(response.body.success, false);
+  });
+
+  it("should reject images larger than 5 MB", async () => {
+    const item = await createItem();
+
+    const oversizedBuffer = Buffer.alloc(
+      5 * 1024 * 1024 + 1
+    );
+
+    const response = await agent
+      .post(`/api/items/${item._id}/image`)
+      .set("x-csrf-token", csrfToken)
+      .attach("image", oversizedBuffer, {
+        filename: "oversized.jpg",
+        contentType: "image/jpeg",
+      });
+
+    assert.equal(response.status, 413);
+    assert.equal(response.body.success, false);
+  });
+
+  it("should return 404 when an item has no uploaded image", async () => {
+    const item = await createItem();
+
+    const response = await request(app)
+      .get(`/api/items/${item._id}/image`);
+
+    assert.equal(response.status, 404);
+    assert.equal(response.body.success, false);
   });
 });
