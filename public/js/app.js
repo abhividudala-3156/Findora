@@ -147,6 +147,24 @@ async function postJson(url, data) {
   return readJsonResponse(response);
 }
 
+
+async function postForm(url, formData) {
+  // Fetch a fresh CSRF token for this state-changing request.
+  const csrfToken = await getCsrfToken();
+
+  const response = await fetch(url, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+      "x-csrf-token": csrfToken
+    },
+    body: formData
+  });
+
+  return readJsonResponse(response);
+}
+
 // ==========================================
 // 6. MESSAGE HELPERS
 // ==========================================
@@ -682,6 +700,7 @@ nextPageButton.addEventListener("click", () => {
 // 18. REPORT FORM SUBMISSION
 // ==========================================
 
+
 reportForm.addEventListener("submit", async (event) => {
   event.preventDefault();
 
@@ -704,22 +723,52 @@ reportForm.addEventListener("submit", async (event) => {
   }
 
   const formData = new FormData(reportForm);
-  const itemData = Object.fromEntries(formData.entries());
+  const imageFile = formData.get("image");
 
-  // Normalize the optional image URL.
-  itemData.imageUrl = (itemData.imageUrl || "").trim();
+  if (!(imageFile instanceof File) || imageFile.size === 0) {
+    showMessage(
+      formMessage,
+      "Please select an image to upload.",
+      "error"
+    );
+    return;
+  }
+
+  // Keep the image out of the JSON item-creation request.
+  const itemData = Object.fromEntries(formData.entries());
+  delete itemData.image;
 
   submitButton.disabled = true;
   submitButton.textContent = "Submitting...";
-
   hideMessage(formMessage);
 
+  let itemCreated = false;
+
   try {
-    await postJson("/api/items", itemData);
+    // Step 1: Create the item and obtain its database ID.
+    const createResult = await postJson("/api/items", itemData);
+    itemCreated = true;
+
+    const itemId = createResult.data?._id;
+
+    if (!itemId) {
+      throw new Error(
+        "Your report was created, but the item ID was not returned. Do not submit it again."
+      );
+    }
+
+    // Step 2: Upload the image to the item's image endpoint.
+    const imageFormData = new FormData();
+    imageFormData.append("image", imageFile);
+
+    await postForm(
+      `/api/items/${encodeURIComponent(itemId)}/image`,
+      imageFormData
+    );
 
     showMessage(
       formMessage,
-      "Your report was submitted successfully!",
+      "Your report and image were submitted successfully!",
       "success"
     );
 
@@ -748,6 +797,12 @@ reportForm.addEventListener("submit", async (event) => {
       showMessage(
         authMessage,
         "Your session may have expired. Please log in again.",
+        "error"
+      );
+    } else if (itemCreated) {
+      showMessage(
+        formMessage,
+        `Your report was created, but the image upload may have failed: ${error.message} Do not submit the report again. Check the item listing before retrying the image upload.`,
         "error"
       );
     } else {

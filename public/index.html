@@ -559,15 +559,18 @@
           >
         </div>
 
-        <div class="form-group">
-          <label for="item-image">Image URL (optional)</label>
+                <div class="form-group">
+          <label for="item-image">Item Image *</label>
           <input
-            type="url"
+            type="file"
             id="item-image"
-            name="imageUrl"
-            maxlength="2048"
-            placeholder="https://example.com/image.jpg"
+            name="image"
+            accept="image/jpeg,image/png,image/webp"
+            required
           >
+          <small class="muted">
+            Accepted formats: JPEG, PNG, WebP. Maximum size: 5 MB.
+          </small>
         </div>
 
         <button
