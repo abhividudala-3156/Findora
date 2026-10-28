@@ -23,7 +23,7 @@ const CREATE_FIELDS = [
   "contactEmail",
 ];
 
-const UPDATE_FIELDS = [...CREATE_FIELDS, "status"];
+const UPDATE_FIELDS = [...CREATE_FIELDS];
 
 function pickFields(source, allowedFields) {
   const result = {};

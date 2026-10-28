@@ -25,6 +25,8 @@ import {
   resetCloudinaryOperationsForTesting,
 } from "../src/services/cloudinaryImageService.js";
 
+import Claim from "../src/models/Claim.js";
+
 let agent;
 let csrfToken;
 let currentUserId;
@@ -113,15 +115,23 @@ async function createLoggedInAgent(email) {
 
   assert.equal(response.status, 200);
 
+
   token = response.body.csrfToken;
 
   assert.ok(token);
 
+  // Get the authenticated user's actual ID.
+  response = await userAgent.get("/api/auth/me");
+
+  assert.equal(response.status, 200);
+  assert.ok(response.body.user?.id);
+
   return {
     agent: userAgent,
     csrfToken: token,
-    userId: response.body.userId,
+    userId: response.body.user.id,
   };
+
 }
 
 // Create an item using the authenticated test user.
@@ -206,6 +216,7 @@ describe("Findora API", () => {
     // Clear records only in the guarded test database.
     await Item.deleteMany({});
     await User.deleteMany({});
+    await Claim.deleteMany({});
 
     const testSession = await createLoggedInAgent(
       "api-test@example.com"
@@ -227,6 +238,7 @@ describe("Findora API", () => {
       if (mongoose.connection.readyState === 1) {
         await Item.deleteMany({});
         await User.deleteMany({});
+        await Claim.deleteMany({});
       }
         } finally {
       try {
@@ -821,4 +833,124 @@ describe("Findora API", () => {
     assert.equal(response.status, 404);
     assert.equal(response.body.success, false);
   });
+
+
+  it("rejects claim submission without authentication", async () => {
+    const item = await createItem();
+    const anonymous = await createAnonymousAgent();
+
+    const response = await anonymous.agent
+      .post(`/api/items/${item._id}/claims`)
+      .set("x-csrf-token", anonymous.csrfToken)
+      .send({
+        message: "I can identify this item by its unique marks.",
+      });
+
+    assert.equal(response.status, 401);
+  });
+
+  it("rejects a claim with an invalid item ID", async () => {
+    const response = await agent
+      .post("/api/items/not-an-id/claims")
+      .set("x-csrf-token", csrfToken)
+      .send({
+        message: "I can identify this item by its unique marks.",
+      });
+
+    assert.equal(response.status, 400);
+  });
+
+  it("rejects a claim when the item does not exist", async () => {
+    const nonexistentId = new mongoose.Types.ObjectId();
+
+    const response = await agent
+      .post(`/api/items/${nonexistentId}/claims`)
+      .set("x-csrf-token", csrfToken)
+      .send({
+        message: "I can identify this item by its unique marks.",
+      });
+
+    assert.equal(response.status, 404);
+  });
+
+  it("rejects a claim explanation that is too short", async () => {
+    const item = await createItem();
+
+    // Use another authenticated student to avoid a self-claim.
+    const other = await createLoggedInAgent(
+      "claimant-test@example.com"
+    );
+
+    const response = await other.agent
+      .post(`/api/items/${item._id}/claims`)
+      .set("x-csrf-token", other.csrfToken)
+      .send({ message: "Too short" });
+
+    assert.equal(response.status, 400);
+  });
+
+  it("should create a pending claim for another student's item", async () => {
+    const item = await createItem();
+
+    // Sign in as a different student from the item owner.
+    const claimant = await createLoggedInAgent(
+      "valid-claimant@example.com"
+    );
+
+    const message =
+      "I can identify the notebook by its unique blue cover and initials.";
+
+    const response = await claimant.agent
+      .post(`/api/items/${item._id}/claims`)
+      .set("x-csrf-token", claimant.csrfToken)
+      .send({ message });
+
+    assert.equal(response.status, 201);
+    assert.equal(response.body.success, true);
+    assert.equal(response.body.data.status, "pending");
+    assert.equal(response.body.data.item.toString(), item._id.toString());
+    assert.equal(response.body.data.claimant.toString(), claimant.userId.toString());
+    assert.equal(response.body.data.itemOwner.toString(), currentUserId);
+    assert.equal(response.body.data.message, message);
+
+    const savedClaim = await Claim.findById(response.body.data._id);
+
+    assert.ok(savedClaim);
+    assert.equal(savedClaim.status, "pending");
+    assert.equal(savedClaim.returnConfirmedByClaimant, false);
+    assert.equal(savedClaim.returnConfirmedByOwner, false);
+  });
+  it("should reject a duplicate pending claim", async () => {
+  const item = await createItem();
+
+  const claimant = await createLoggedInAgent(
+    "duplicate-claimant@example.com"
+  );
+
+  const message =
+    "I can identify this item by its unique marks and details.";
+
+  const firstResponse = await claimant.agent
+    .post(`/api/items/${item._id}/claims`)
+    .set("x-csrf-token", claimant.csrfToken)
+    .send({ message });
+
+  assert.equal(firstResponse.status, 201);
+
+  const secondResponse = await claimant.agent
+    .post(`/api/items/${item._id}/claims`)
+    .set("x-csrf-token", claimant.csrfToken)
+    .send({ message });
+
+  assert.equal(secondResponse.status, 409);
+  assert.equal(secondResponse.body.success, false);
+
+  const pendingClaims = await Claim.countDocuments({
+    item: item._id,
+    status: "pending",
+  });
+
+  assert.equal(pendingClaims, 1);
+});
+
 });

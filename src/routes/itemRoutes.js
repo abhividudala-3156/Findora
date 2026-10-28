@@ -21,6 +21,8 @@ import upload, {
 
 import { requireAuth } from "../middleware/auth.js";
 
+import { createClaim } from "../controllers/claimController.js";
+
 const router = Router();
 
 // Public routes
@@ -28,6 +30,7 @@ router.get("/", getItems);
 router.get("/:id", getItemById);
 
 // Protected routes
+router.post("/:id/claims", requireAuth, createClaim);
 router.post("/", requireAuth, createItem);
 router.patch("/:id", requireAuth, updateItem);
 router.delete("/:id", requireAuth, deleteItem);
