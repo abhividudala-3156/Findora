@@ -27,6 +27,8 @@ import {
 
 import Claim from "../src/models/Claim.js";
 
+import Notification from "../src/models/Notification.js";
+
 let agent;
 let csrfToken;
 let currentUserId;
@@ -214,6 +216,7 @@ describe("Findora API", () => {
 
   beforeEach(async () => {
     // Clear records only in the guarded test database.
+    await Notification.deleteMany({});
     await Item.deleteMany({});
     await User.deleteMany({});
     await Claim.deleteMany({});
@@ -236,6 +239,7 @@ describe("Findora API", () => {
   after(async () => {
     try {
       if (mongoose.connection.readyState === 1) {
+        await Notification.deleteMany({});
         await Item.deleteMany({});
         await User.deleteMany({});
         await Claim.deleteMany({});
@@ -919,7 +923,19 @@ describe("Findora API", () => {
     assert.equal(savedClaim.status, "pending");
     assert.equal(savedClaim.returnConfirmedByClaimant, false);
     assert.equal(savedClaim.returnConfirmedByOwner, false);
-  });
+
+    // Verify that the item owner receives a notification.
+    const notification = await Notification.findOne({
+      recipient: currentUserId,
+      claim: savedClaim._id,
+      item: item._id,
+    });
+
+    assert.ok(notification);
+    assert.equal(notification.type, "claim_submitted");
+    assert.equal(notification.isRead, false);
+    assert.match(notification.message, /new claim has been submitted/i);
+      });
   it("should reject a duplicate pending claim", async () => {
   const item = await createItem();
 
@@ -983,7 +999,220 @@ describe("Findora API", () => {
 
     const savedClaim = await Claim.findById(claimId);
     assert.equal(savedClaim.status, "approved");
+
+    const savedItem = await Item.findById(item._id);
+    assert.equal(savedItem.status, "claimed");
+
+    // Verify that the claimant receives an approval notification.
+    const notification = await Notification.findOne({
+      recipient: claimant.userId,
+      claim: claimId,
+      item: item._id,
+    });
+
+    assert.ok(notification);
+    assert.equal(notification.type, "claim_approved");
+    assert.equal(notification.isRead, false);
+    assert.match(notification.message, /claim.*approved/i);
   });
+
+
+it("records claimant recovery confirmation without resolving the item early", async () => {
+  const item = await createItem();
+
+  const claimant = await createLoggedInAgent(
+    "recovery-claimant@example.com"
+  );
+
+  const claimResponse = await claimant.agent
+    .post(`/api/items/${item._id}/claims`)
+    .set("x-csrf-token", claimant.csrfToken)
+    .send({
+      message:
+        "I can identify this item by its unique marks and details.",
+    });
+
+  assert.equal(claimResponse.status, 201);
+
+  const claimId = claimResponse.body.data._id;
+
+  const approvalResponse = await agent
+    .patch(`/api/items/${item._id}/claims/${claimId}/approve`)
+    .set("x-csrf-token", csrfToken);
+
+  assert.equal(approvalResponse.status, 200);
+
+  const confirmationResponse = await claimant.agent
+    .patch(
+      `/api/items/${item._id}/claims/${claimId}/confirm-recovery`
+    )
+    .set("x-csrf-token", claimant.csrfToken);
+
+  assert.equal(confirmationResponse.status, 200);
+  assert.equal(confirmationResponse.body.success, true);
+  assert.equal(confirmationResponse.body.data.recoveryComplete, false);
+  assert.equal(confirmationResponse.body.data.itemStatus, "claimed");
+
+  const savedClaim = await Claim.findById(claimId);
+  assert.equal(savedClaim.returnConfirmedByClaimant, true);
+  assert.equal(savedClaim.returnConfirmedByOwner, false);
+
+  const savedItem = await Item.findById(item._id);
+  assert.equal(savedItem.status, "claimed");
+});
+
+
+it("resolves the item after both parties confirm recovery", async () => {
+  const item = await createItem();
+
+  const claimant = await createLoggedInAgent(
+    "recovery-complete-claimant@example.com"
+  );
+
+  const claimResponse = await claimant.agent
+    .post(`/api/items/${item._id}/claims`)
+    .set("x-csrf-token", claimant.csrfToken)
+    .send({
+      message:
+        "I can identify this item by its unique marks and details.",
+    });
+
+  assert.equal(claimResponse.status, 201);
+
+  const claimId = claimResponse.body.data._id;
+
+  const approvalResponse = await agent
+    .patch(`/api/items/${item._id}/claims/${claimId}/approve`)
+    .set("x-csrf-token", csrfToken);
+
+  assert.equal(approvalResponse.status, 200);
+
+  // First, the claimant confirms recovery.
+  const claimantConfirmation = await claimant.agent
+    .patch(
+      `/api/items/${item._id}/claims/${claimId}/confirm-recovery`
+    )
+    .set("x-csrf-token", claimant.csrfToken);
+
+  assert.equal(claimantConfirmation.status, 200);
+  assert.equal(claimantConfirmation.body.data.recoveryComplete, false);
+
+  // Next, the owner confirms recovery.
+  const ownerConfirmation = await agent
+    .patch(
+      `/api/items/${item._id}/claims/${claimId}/confirm-recovery`
+    )
+    .set("x-csrf-token", csrfToken);
+
+  assert.equal(ownerConfirmation.status, 200);
+  assert.equal(ownerConfirmation.body.data.recoveryComplete, true);
+  assert.equal(ownerConfirmation.body.data.itemStatus, "resolved");
+
+  const savedClaim = await Claim.findById(claimId);
+  assert.equal(savedClaim.returnConfirmedByClaimant, true);
+  assert.equal(savedClaim.returnConfirmedByOwner, true);
+
+  const savedItem = await Item.findById(item._id);
+  assert.equal(savedItem.status, "resolved");
+});
+
+
+it("prevents an unrelated user from confirming recovery", async () => {
+  const item = await createItem();
+
+  const claimant = await createLoggedInAgent(
+    "recovery-auth-claimant@example.com"
+  );
+
+  const stranger = await createLoggedInAgent(
+    "recovery-auth-stranger@example.com"
+  );
+
+  const claimResponse = await claimant.agent
+    .post(`/api/items/${item._id}/claims`)
+    .set("x-csrf-token", claimant.csrfToken)
+    .send({
+      message:
+        "I can identify this item by its unique marks and details.",
+    });
+
+  assert.equal(claimResponse.status, 201);
+
+  const claimId = claimResponse.body.data._id;
+
+  const approvalResponse = await agent
+    .patch(`/api/items/${item._id}/claims/${claimId}/approve`)
+    .set("x-csrf-token", csrfToken);
+
+  assert.equal(approvalResponse.status, 200);
+
+  const response = await stranger.agent
+    .patch(
+      `/api/items/${item._id}/claims/${claimId}/confirm-recovery`
+    )
+    .set("x-csrf-token", stranger.csrfToken);
+
+  assert.equal(response.status, 403);
+  assert.equal(response.body.success, false);
+
+  const savedClaim = await Claim.findById(claimId);
+  assert.equal(savedClaim.returnConfirmedByClaimant, false);
+  assert.equal(savedClaim.returnConfirmedByOwner, false);
+
+  const savedItem = await Item.findById(item._id);
+  assert.equal(savedItem.status, "claimed");
+});
+
+
+it("prevents a claimant from confirming recovery twice", async () => {
+  const item = await createItem();
+
+  const claimant = await createLoggedInAgent(
+    "recovery-duplicate-claimant@example.com"
+  );
+
+  const claimResponse = await claimant.agent
+    .post(`/api/items/${item._id}/claims`)
+    .set("x-csrf-token", claimant.csrfToken)
+    .send({
+      message:
+        "I can identify this item by its unique marks and details.",
+    });
+
+  assert.equal(claimResponse.status, 201);
+
+  const claimId = claimResponse.body.data._id;
+
+  const approvalResponse = await agent
+    .patch(`/api/items/${item._id}/claims/${claimId}/approve`)
+    .set("x-csrf-token", csrfToken);
+
+  assert.equal(approvalResponse.status, 200);
+
+  const recoveryUrl =
+    `/api/items/${item._id}/claims/${claimId}/confirm-recovery`;
+
+  const firstConfirmation = await claimant.agent
+    .patch(recoveryUrl)
+    .set("x-csrf-token", claimant.csrfToken);
+
+  assert.equal(firstConfirmation.status, 200);
+
+  const duplicateConfirmation = await claimant.agent
+    .patch(recoveryUrl)
+    .set("x-csrf-token", claimant.csrfToken);
+
+  assert.equal(duplicateConfirmation.status, 409);
+  assert.equal(duplicateConfirmation.body.success, false);
+
+  const savedClaim = await Claim.findById(claimId);
+  assert.equal(savedClaim.returnConfirmedByClaimant, true);
+  assert.equal(savedClaim.returnConfirmedByOwner, false);
+
+  const savedItem = await Item.findById(item._id);
+  assert.equal(savedItem.status, "claimed");
+});
+
 
   it("allows the item owner to reject a pending claim", async () => {
     const item = await createItem();
@@ -1014,6 +1243,19 @@ describe("Findora API", () => {
 
     const savedClaim = await Claim.findById(claimId);
     assert.equal(savedClaim.status, "rejected");
+
+    // Verify that the claimant receives a rejection notification.
+    const notification = await Notification.findOne({
+      recipient: claimant.userId,
+      claim: claimId,
+      item: item._id,
+    });
+
+    assert.ok(notification);
+    assert.equal(notification.type, "claim_rejected");
+    assert.equal(notification.isRead, false);
+    assert.match(notification.message, /claim.*rejected/i);
+
   });
 
   it("prevents another user from reviewing a claim", async () => {
@@ -1096,6 +1338,149 @@ describe("Findora API", () => {
 
     const savedClaim = await Claim.findById(claimId);
     assert.equal(savedClaim.status, "approved");
+  });
+
+  it("returns only the logged-in user's notifications", async () => {
+    const owner = await createLoggedInAgent(
+      "notification-owner@example.com"
+    );
+    const claimant = await createLoggedInAgent(
+      "notification-claimant@example.com"
+    );
+    const otherUser = await createLoggedInAgent(
+      "notification-other@example.com"
+    );
+
+    const itemResponse = await owner.agent
+      .post("/api/items")
+      .set("x-csrf-token", owner.csrfToken)
+      .send(createValidItem());
+
+    assert.equal(itemResponse.status, 201);
+    const item = itemResponse.body.data;
+
+    const claimResponse = await claimant.agent
+      .post(`/api/items/${item._id}/claims`)
+      .set("x-csrf-token", claimant.csrfToken)
+      .send({
+        message:
+          "I can identify this item by its unique marks and details.",
+      });
+
+    assert.equal(claimResponse.status, 201);
+
+    const ownerResponse = await owner.agent.get("/api/notifications");
+
+    assert.equal(ownerResponse.status, 200);
+    assert.equal(ownerResponse.body.success, true);
+    assert.ok(Array.isArray(ownerResponse.body.data));
+    assert.ok(
+      ownerResponse.body.data.some(
+        (notification) => notification.type === "claim_submitted"
+      )
+    );
+
+    const otherResponse = await otherUser.agent.get("/api/notifications");
+
+    assert.equal(otherResponse.status, 200);
+    assert.equal(otherResponse.body.success, true);
+    assert.equal(otherResponse.body.count, 0);
+  });
+
+  it("marks the logged-in user's notification as read", async () => {
+    const owner = await createLoggedInAgent(
+      "notification-read-owner@example.com"
+    );
+    const claimant = await createLoggedInAgent(
+      "notification-read-claimant@example.com"
+    );
+
+    const itemResponse = await owner.agent
+      .post("/api/items")
+      .set("x-csrf-token", owner.csrfToken)
+      .send(createValidItem());
+
+    assert.equal(itemResponse.status, 201);
+    const item = itemResponse.body.data;
+
+    const claimResponse = await claimant.agent
+      .post(`/api/items/${item._id}/claims`)
+      .set("x-csrf-token", claimant.csrfToken)
+      .send({
+        message:
+          "I can identify this item by its unique marks and details.",
+      });
+
+    assert.equal(claimResponse.status, 201);
+
+    const notification = await Notification.findOne({
+      recipient: owner.userId,
+      type: "claim_submitted",
+    });
+
+    assert.ok(notification);
+    assert.equal(notification.isRead, false);
+
+    const response = await owner.agent
+      .patch(`/api/notifications/${notification._id}/read`)
+      .set("x-csrf-token", owner.csrfToken);
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.success, true);
+    assert.equal(response.body.data.isRead, true);
+
+    const savedNotification = await Notification.findById(
+      notification._id
+    );
+
+    assert.equal(savedNotification.isRead, true);
+  });
+
+  it("prevents a user from marking another user's notification as read", async () => {
+    const owner = await createLoggedInAgent(
+      "notification-access-owner@example.com"
+    );
+    const claimant = await createLoggedInAgent(
+      "notification-access-claimant@example.com"
+    );
+
+    const itemResponse = await owner.agent
+      .post("/api/items")
+      .set("x-csrf-token", owner.csrfToken)
+      .send(createValidItem());
+
+    assert.equal(itemResponse.status, 201);
+    const item = itemResponse.body.data;
+
+    const claimResponse = await claimant.agent
+      .post(`/api/items/${item._id}/claims`)
+      .set("x-csrf-token", claimant.csrfToken)
+      .send({
+        message:
+          "I can identify this item by its unique marks and details.",
+      });
+
+    assert.equal(claimResponse.status, 201);
+
+    const notification = await Notification.findOne({
+      recipient: owner.userId,
+      type: "claim_submitted",
+    });
+
+    assert.ok(notification);
+
+    const response = await claimant.agent
+      .patch(`/api/notifications/${notification._id}/read`)
+      .set("x-csrf-token", claimant.csrfToken);
+
+    assert.equal(response.status, 404);
+    assert.equal(response.body.success, false);
+
+    const savedNotification = await Notification.findById(
+      notification._id
+    );
+
+    assert.equal(savedNotification.isRead, false);
   });
 
 

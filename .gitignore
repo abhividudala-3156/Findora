@@ -9,3 +9,6 @@ Thumbs.db
 # User-uploaded images and temporary uploads
 uploads/
 tmp/uploads/
+
+# Local session cookies
+findora-cookies.txt

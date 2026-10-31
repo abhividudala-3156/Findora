@@ -25,6 +25,7 @@ import {
   createClaim,
   approveClaim,
   rejectClaim,
+  confirmRecovery,
 } from "../controllers/claimController.js";
 
 const router = Router();
@@ -48,6 +49,11 @@ router.patch(
   "/:id/claims/:claimId/reject",
   requireAuth,
   rejectClaim
+);
+router.patch(
+  "/:id/claims/:claimId/confirm-recovery",
+  requireAuth,
+  confirmRecovery
 );
 
 router.get("/:id/image", getItemImage);
