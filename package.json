@@ -1,6 +1,6 @@
 {
   "name": "findora",
-  "version": "1.4.0",
+  "version": "1.6.1",
   "private": true,
   "description": "Findora - Smart Campus Lost and Found Platform",
   "type": "module",

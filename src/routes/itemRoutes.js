@@ -21,7 +21,11 @@ import upload, {
 
 import { requireAuth } from "../middleware/auth.js";
 
-import { createClaim } from "../controllers/claimController.js";
+import {
+  createClaim,
+  approveClaim,
+  rejectClaim,
+} from "../controllers/claimController.js";
 
 const router = Router();
 
@@ -34,6 +38,17 @@ router.post("/:id/claims", requireAuth, createClaim);
 router.post("/", requireAuth, createItem);
 router.patch("/:id", requireAuth, updateItem);
 router.delete("/:id", requireAuth, deleteItem);
+router.patch(
+  "/:id/claims/:claimId/approve",
+  requireAuth,
+  approveClaim
+);
+
+router.patch(
+  "/:id/claims/:claimId/reject",
+  requireAuth,
+  rejectClaim
+);
 
 router.get("/:id/image", getItemImage);
 

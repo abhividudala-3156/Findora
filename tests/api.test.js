@@ -953,4 +953,150 @@ describe("Findora API", () => {
   assert.equal(pendingClaims, 1);
 });
 
+
+  it("allows the item owner to approve a pending claim", async () => {
+    const item = await createItem();
+
+    const claimant = await createLoggedInAgent(
+      "approval-claimant@example.com"
+    );
+
+    const claimResponse = await claimant.agent
+      .post(`/api/items/${item._id}/claims`)
+      .set("x-csrf-token", claimant.csrfToken)
+      .send({
+        message:
+          "I can identify this item by its unique marks and details.",
+      });
+
+    assert.equal(claimResponse.status, 201);
+
+    const claimId = claimResponse.body.data._id;
+
+    const response = await agent
+      .patch(`/api/items/${item._id}/claims/${claimId}/approve`)
+      .set("x-csrf-token", csrfToken);
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.success, true);
+    assert.equal(response.body.data.status, "approved");
+
+    const savedClaim = await Claim.findById(claimId);
+    assert.equal(savedClaim.status, "approved");
+  });
+
+  it("allows the item owner to reject a pending claim", async () => {
+    const item = await createItem();
+
+    const claimant = await createLoggedInAgent(
+      "rejection-claimant@example.com"
+    );
+
+    const claimResponse = await claimant.agent
+      .post(`/api/items/${item._id}/claims`)
+      .set("x-csrf-token", claimant.csrfToken)
+      .send({
+        message:
+          "I can identify this item by its unique marks and details.",
+      });
+
+    assert.equal(claimResponse.status, 201);
+
+    const claimId = claimResponse.body.data._id;
+
+    const response = await agent
+      .patch(`/api/items/${item._id}/claims/${claimId}/reject`)
+      .set("x-csrf-token", csrfToken);
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.success, true);
+    assert.equal(response.body.data.status, "rejected");
+
+    const savedClaim = await Claim.findById(claimId);
+    assert.equal(savedClaim.status, "rejected");
+  });
+
+  it("prevents another user from reviewing a claim", async () => {
+    const item = await createItem();
+
+    const claimant = await createLoggedInAgent(
+      "unauthorized-claimant@example.com"
+    );
+
+    const claimResponse = await claimant.agent
+      .post(`/api/items/${item._id}/claims`)
+      .set("x-csrf-token", claimant.csrfToken)
+      .send({
+        message:
+          "I can identify this item by its unique marks and details.",
+      });
+
+    assert.equal(claimResponse.status, 201);
+
+    const claimId = claimResponse.body.data._id;
+
+    const anotherUser = await createLoggedInAgent(
+      "unauthorized-reviewer@example.com"
+    );
+
+    const response = await anotherUser.agent
+      .patch(`/api/items/${item._id}/claims/${claimId}/approve`)
+      .set("x-csrf-token", anotherUser.csrfToken);
+
+    assert.equal(response.status, 403);
+
+    const savedClaim = await Claim.findById(claimId);
+    assert.equal(savedClaim.status, "pending");
+  });
+
+
+  it("rejects an invalid claim ID during approval", async () => {
+    const item = await createItem();
+
+    const response = await agent
+      .patch(`/api/items/${item._id}/claims/not-a-valid-id/approve`)
+      .set("x-csrf-token", csrfToken);
+
+    assert.equal(response.status, 400);
+    assert.equal(response.body.success, false);
+  });
+
+  it("prevents a claim from being reviewed twice", async () => {
+    const item = await createItem();
+
+    const claimant = await createLoggedInAgent(
+      "review-twice-claimant@example.com"
+    );
+
+    const claimResponse = await claimant.agent
+      .post(`/api/items/${item._id}/claims`)
+      .set("x-csrf-token", claimant.csrfToken)
+      .send({
+        message:
+          "I can identify this item by its unique marks and details.",
+      });
+
+    assert.equal(claimResponse.status, 201);
+
+    const claimId = claimResponse.body.data._id;
+
+    const firstReview = await agent
+      .patch(`/api/items/${item._id}/claims/${claimId}/approve`)
+      .set("x-csrf-token", csrfToken);
+
+    assert.equal(firstReview.status, 200);
+    assert.equal(firstReview.body.data.status, "approved");
+
+    const secondReview = await agent
+      .patch(`/api/items/${item._id}/claims/${claimId}/reject`)
+      .set("x-csrf-token", csrfToken);
+
+    assert.equal(secondReview.status, 409);
+    assert.equal(secondReview.body.success, false);
+
+    const savedClaim = await Claim.findById(claimId);
+    assert.equal(savedClaim.status, "approved");
+  });
+
+
 });
