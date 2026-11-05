@@ -44,6 +44,15 @@ export async function createClaim(req, res) {
       });
     }
 
+    // Claims require a verified item owner.
+    if (!item.owner) {
+      return res.status(409).json({
+        success: false,
+        message:
+          "This item cannot accept claims because its owner has not been verified. Please contact an administrator.",
+      });
+    }
+
     const claimantId = req.user._id;
 
     // Owners cannot claim their own items.

@@ -314,6 +314,14 @@ select {
   box-shadow: 0 12px 30px #1720330d;
 }
 
+.item-card-image {
+  display: block;
+  width: 100%;
+  height: 190px;
+  object-fit: cover;
+  background: var(--background);
+}
+
 .item-card-content {
   padding: 20px;
 }
@@ -852,4 +860,52 @@ textarea:focus-visible {
     max-width: 130px;
     overflow-wrap: anywhere;
   }
+}
+
+/* Claim form */
+.claim-button,
+.claim-submit-button,
+.claim-cancel-button {
+  padding: 10px 16px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.claim-button,
+.claim-submit-button {
+  background: var(--primary);
+  color: white;
+}
+
+.claim-cancel-button {
+  background: var(--border);
+  color: var(--text);
+}
+
+.claim-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.claim-form textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: inherit;
+  resize: vertical;
+}
+
+.claim-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.claim-form button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }

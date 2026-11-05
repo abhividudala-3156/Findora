@@ -2,7 +2,7 @@
 "use strict";
 
 // ==========================================
-// 1. HTML ELEMENT REFERENCES
+// 1. HTML ELEMENT REFERENCEarticle
 // ==========================================
 
 const itemGrid = document.getElementById("item-grid");
@@ -459,9 +459,31 @@ function formatDate(dateValue) {
 // 12. CREATE AN ITEM CARD
 // ==========================================
 
+
 function createItemCard(item) {
   const article = document.createElement("article");
   article.className = "item-card";
+
+  // Display the uploaded image when available.
+  if (
+    typeof item.imageUrl === "string" &&
+    item.imageUrl.startsWith("https://")
+  ) {
+    const image = document.createElement("img");
+
+    image.className = "item-card-image";
+    image.src = item.imageUrl;
+    image.alt = item.title
+      ? `Image of ${item.title}`
+      : "Reported item image";
+    image.loading = "lazy";
+
+    image.addEventListener("error", () => {
+      image.remove();
+    });
+
+    article.append(image);
+  }
 
   const content = document.createElement("div");
   content.className = "item-card-content";
@@ -517,6 +539,163 @@ function createItemCard(item) {
 
   meta.append(location, date);
   content.append(top, title, description, meta);
+
+  // Claim option is available only for active found items.
+  const currentUserId = String(
+    currentUser?.id || currentUser?._id || ""
+  );
+
+  const itemOwnerId = String(
+    item.owner?._id || item.owner || ""
+  );
+
+  const canClaim =
+    item.type === "found" &&
+    item.status === "active" &&
+    (!currentUser || itemOwnerId !== currentUserId);
+
+  if (canClaim) {
+    const claimButton = createTextElement(
+      "button",
+      "claim-button",
+      "Claim This Item"
+    );
+
+    claimButton.type = "button";
+
+    claimButton.addEventListener("click", () => {
+      // Ask unauthenticated visitors to log in.
+      if (!currentUser) {
+        showAuthSection();
+
+        showMessage(
+          authMessage,
+          "Please log in to submit an item claim.",
+          "error"
+        );
+
+        return;
+      }
+
+      // Avoid displaying the form more than once.
+      if (content.querySelector(".claim-form")) {
+        return;
+      }
+
+      const claimForm = document.createElement("form");
+      claimForm.className = "claim-form";
+
+      const claimLabel = createTextElement(
+        "label",
+        "",
+        "Explain why this item belongs to you"
+      );
+
+      const claimInput = document.createElement("textarea");
+      claimInput.name = "message";
+      claimInput.placeholder =
+        "Describe identifying details or proof of ownership...";
+      claimInput.minLength = 10;
+      claimInput.maxLength = 1000;
+      claimInput.required = true;
+      claimInput.rows = 4;
+
+      const claimMessage = createTextElement(
+        "p",
+        "form-message",
+        ""
+      );
+      claimMessage.hidden = true;
+      claimMessage.setAttribute("role", "status");
+
+      const actions = document.createElement("div");
+      actions.className = "claim-actions";
+
+      const submitClaimButton = createTextElement(
+        "button",
+        "claim-submit-button",
+        "Submit Claim"
+      );
+      submitClaimButton.type = "submit";
+
+      const cancelButton = createTextElement(
+        "button",
+        "claim-cancel-button",
+        "Cancel"
+      );
+      cancelButton.type = "button";
+
+      cancelButton.addEventListener("click", () => {
+        claimForm.remove();
+        claimButton.hidden = false;
+      });
+
+      actions.append(submitClaimButton, cancelButton);
+
+      claimForm.append(
+        claimLabel,
+        claimInput,
+        claimMessage,
+        actions
+      );
+
+      claimButton.hidden = true;
+      content.append(claimForm);
+
+      claimInput.focus();
+
+      claimForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+
+        const message = claimInput.value.trim();
+
+        if (message.length < 10 || message.length > 1000) {
+          showMessage(
+            claimMessage,
+            "Your explanation must contain 10–1000 characters.",
+            "error"
+          );
+          return;
+        }
+
+        submitClaimButton.disabled = true;
+        submitClaimButton.textContent = "Submitting...";
+
+        hideMessage(claimMessage);
+
+        try {
+          const result = await postJson(
+            `/api/items/${encodeURIComponent(item._id)}/claims`,
+            { message }
+          );
+
+          showMessage(
+            claimMessage,
+            result.message || "Claim submitted successfully.",
+            "success"
+          );
+
+          claimInput.disabled = true;
+          submitClaimButton.remove();
+          cancelButton.textContent = "Close";
+          cancelButton.onclick = () => claimForm.remove();
+
+        } catch (error) {
+          showMessage(
+            claimMessage,
+            error.message || "Unable to submit your claim.",
+            "error"
+          );
+
+          submitClaimButton.disabled = false;
+          submitClaimButton.textContent = "Submit Claim";
+        }
+      });
+    });
+
+    content.append(claimButton);
+  }
+
   article.append(content);
 
   return article;
