@@ -40,6 +40,17 @@ const closeAuthButton = document.getElementById("close-auth");
 const userPanel = document.getElementById("user-panel");
 const currentUserName = document.getElementById("current-user-name");
 const logoutButton = document.getElementById("logout-button");
+// Notification elements
+const notificationsNav = document.getElementById("notifications-nav");
+const notificationsSection = document.getElementById("notifications");
+const notificationCount = document.getElementById("notification-count");
+const notificationList = document.getElementById("notification-list");
+
+const refreshNotificationsButton = document.getElementById(
+  "refresh-notifications"
+);
+
+const notificationMessage = document.getElementById("notification-message");
 
 // ==========================================
 // 2. APPLICATION STATE
@@ -146,6 +157,21 @@ async function postJson(url, data) {
 
   return readJsonResponse(response);
 }
+async function patchJson(url, data = {}) {
+  const csrfToken = await getCsrfToken();
+
+  const response = await fetch(url, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      "x-csrf-token": csrfToken,
+    },
+    credentials: "same-origin",
+    body: JSON.stringify(data),
+  });
+
+  return readJsonResponse(response);
+}
 
 
 async function postForm(url, formData) {
@@ -218,7 +244,119 @@ function updateAuthenticationUI() {
     // clicking it will open the login interface.
     submitButton.disabled = false;
   }
+    updateNotificationsVisibility();
 }
+
+function updateNotificationsVisibility() {
+  const isLoggedIn = Boolean(currentUser);
+
+  if (notificationsNav) {
+    notificationsNav.hidden = !isLoggedIn;
+  }
+
+  if (notificationsSection) {
+    notificationsSection.hidden = !isLoggedIn;
+  }
+}
+
+function updateNotificationCount(notifications) {
+  if (!notificationCount) return;
+
+  const unreadCount = notifications.filter(
+    (notification) => !notification.isRead
+  ).length;
+
+  notificationCount.textContent = unreadCount;
+
+  notificationCount.hidden = unreadCount === 0;
+}
+
+function createNotificationCard(notification) {
+  const card = document.createElement("article");
+  card.className = "notification-card";
+
+  if (!notification.isRead) {
+    card.classList.add("unread");
+  }
+
+  const message = document.createElement("p");
+  message.textContent = notification.message;
+
+  const date = document.createElement("small");
+  date.textContent = formatDate(notification.createdAt);
+
+  card.append(message, date);
+
+  if (!notification.isRead) {
+    const markReadButton = document.createElement("button");
+
+    markReadButton.type = "button";
+    markReadButton.textContent = "Mark as read";
+    markReadButton.className = "button button-secondary";
+
+    markReadButton.addEventListener("click", async () => {
+      markReadButton.disabled = true;
+
+      try {
+        await patchJson(
+          `/api/notifications/${encodeURIComponent(notification._id)}/read`
+        );
+
+        notification.isRead = true;
+        await loadNotifications();
+      } catch (error) {
+        console.error("Failed to mark notification as read:", error);
+        markReadButton.disabled = false;
+      }
+    });
+
+    card.appendChild(markReadButton);
+  }
+
+  return card;
+}
+
+async function loadNotifications() {
+  if (!currentUser || !notificationList) return;
+
+  notificationList.textContent = "Loading notifications...";
+
+  try {
+    const response = await fetch("/api/notifications", {
+      method: "GET",
+      credentials: "same-origin",
+    });
+
+    const result = await readJsonResponse(response);
+
+    if (!result.success) {
+      throw new Error(result.message || "Unable to load notifications.");
+    }
+
+    const notifications = result.data || [];
+
+    notificationList.replaceChildren();
+
+    if (notifications.length === 0) {
+      const emptyMessage = document.createElement("p");
+      emptyMessage.textContent = "You have no notifications.";
+      notificationList.appendChild(emptyMessage);
+    } else {
+      notifications.forEach((notification) => {
+        notificationList.appendChild(
+          createNotificationCard(notification)
+        );
+      });
+    }
+
+    updateNotificationCount(notifications);
+  } catch (error) {
+    console.error("Failed to load notifications:", error);
+    notificationList.textContent =
+      "Unable to load notifications. Please try again.";
+  }
+}
+
 
 function showAuthSection() {
   authSection.hidden = false;
@@ -337,8 +475,8 @@ authForm.addEventListener("submit", async (event) => {
     const result = await postJson("/api/auth/login", payload);
 
     currentUser = result.user;
-
     updateAuthenticationUI();
+    await loadNotifications
     hideAuthSection();
 
     authForm.reset();
@@ -381,6 +519,20 @@ logoutButton.addEventListener("click", async () => {
 
     currentUser = null;
     updateAuthenticationUI();
+
+      if (notificationList) {
+      notificationList.replaceChildren();
+    }
+
+    if (notificationCount) {
+      notificationCount.textContent = "0";
+      notificationCount.hidden = true;
+    }
+
+    if (notificationMessage) {
+      notificationMessage.textContent = "";
+      notificationMessage.hidden = true;
+    }
 
     showMessage(
       formMessage,
@@ -426,6 +578,7 @@ async function restoreSession() {
 
     currentUser = result.user;
     updateAuthenticationUI();
+    await loadNotifications();
   } catch (error) {
     // A temporary session-check failure should not prevent
     // public listings from loading.
@@ -548,6 +701,10 @@ function createItemCard(item) {
   const itemOwnerId = String(
     item.owner?._id || item.owner || ""
   );
+
+   console.log("Current user:", currentUser);
+  console.log("Current user ID:", currentUserId);
+  console.log("Item owner ID:", itemOwnerId);
 
   const canClaim =
     item.type === "found" &&
@@ -696,11 +853,112 @@ function createItemCard(item) {
     content.append(claimButton);
   }
 
+  // Show claim review option only to the item owner.
+const canReviewClaims =
+  currentUser &&
+  item.type === "found" &&
+  itemOwnerId === currentUserId;
+
+  console.log("Can review claims:", {
+  title: item.title,
+  type: item.type,
+  canReviewClaims,
+});
+
+if (canReviewClaims) {
+  const reviewClaimsButton = createTextElement(
+    "button",
+    "review-claims-button",
+    "Review Claims"
+  );
+
+  reviewClaimsButton.type = "button";
+
+  reviewClaimsButton.addEventListener("click", () => {
+    loadItemClaims(item._id, content);
+  });
+
+  content.append(reviewClaimsButton);
+}
+
   article.append(content);
 
   return article;
 }
 
+// Load claims submitted for an item.
+async function loadItemClaims(itemId, content) {
+  try {
+    const result = await readJsonResponse(
+      await fetch(
+        `/api/items/${encodeURIComponent(itemId)}/claims`,
+        {
+          method: "GET",
+          credentials: "same-origin",
+        }
+      )
+    );
+
+    // Avoid displaying the claims section more than once.
+    const existingClaims = content.querySelector(".item-claims");
+
+    if (existingClaims) {
+      existingClaims.remove();
+      return;
+    }
+
+    const claimsSection = document.createElement("div");
+    claimsSection.className = "item-claims";
+
+    const heading = createTextElement(
+      "h4",
+      "",
+      `Claims (${result.count})`
+    );
+
+    claimsSection.append(heading);
+
+    if (result.data.length === 0) {
+      claimsSection.append(
+        createTextElement("p", "", "No claims submitted yet.")
+      );
+    } else {
+      result.data.forEach((claim) => {
+        const claimCard = document.createElement("div");
+        claimCard.className = "claim-review-card";
+
+        const claimant = createTextElement(
+          "p",
+          "",
+          `Claimant: ${claim.claimant?.name || "Unknown"}`
+        );
+
+        const message = createTextElement(
+          "p",
+          "",
+          `Message: ${claim.message}`
+        );
+
+        const status = createTextElement(
+          "p",
+          "claim-status",
+          `Status: ${claim.status}`
+        );
+
+        claimCard.append(claimant, message, status);
+        claimsSection.append(claimCard);
+      });
+    }
+
+    content.append(claimsSection);
+  } catch (error) {
+    showMessage(
+      authMessage,
+      error.message || "Unable to load item claims.",
+      "error"
+    );
+  }
+}
 // ==========================================
 // 13. DISPLAY ITEMS
 // ==========================================
@@ -998,7 +1256,18 @@ reportForm.addEventListener("submit", async (event) => {
     submitButton.textContent = "Submit Report";
   }
 });
+// Notification event listeners
+if (refreshNotificationsButton) {
+  refreshNotificationsButton.addEventListener("click", () => {
+    loadNotifications();
+  });
+}
 
+if (notificationsNav) {
+  notificationsNav.addEventListener("click", () => {
+    loadNotifications();
+  });
+}
 // ==========================================
 // 19. INITIALIZE THE PAGE
 // ==========================================

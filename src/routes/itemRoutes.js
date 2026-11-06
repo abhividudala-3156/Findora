@@ -23,6 +23,7 @@ import { requireAuth } from "../middleware/auth.js";
 
 import {
   createClaim,
+  getItemClaims,
   approveClaim,
   rejectClaim,
   confirmRecovery,
@@ -36,6 +37,7 @@ router.get("/:id", getItemById);
 
 // Protected routes
 router.post("/:id/claims", requireAuth, createClaim);
+router.get("/:id/claims", requireAuth, getItemClaims);
 router.post("/", requireAuth, createItem);
 router.patch("/:id", requireAuth, updateItem);
 router.delete("/:id", requireAuth, deleteItem);

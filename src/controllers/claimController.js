@@ -126,6 +126,61 @@ export async function createClaim(req, res) {
   }
 }
 
+// Get all claims submitted for an item by its owner.
+export async function getItemClaims(req, res) {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid item ID",
+      });
+    }
+
+    const item = await Item.findById(id);
+
+    if (!item) {
+      return res.status(404).json({
+        success: false,
+        message: "Item not found",
+      });
+    }
+
+    // Only the item owner can view its claims.
+    if (
+      !item.owner ||
+      item.owner.toString() !== req.user._id.toString()
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "Only the item owner can view claims",
+      });
+    }
+
+    const claims = await Claim.find({
+      item: item._id,
+      itemOwner: req.user._id,
+    })
+      .populate("claimant", "name email")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return res.status(200).json({
+      success: true,
+      count: claims.length,
+      data: claims,
+    });
+  } catch (error) {
+    console.error("Get item claims error:", error.message);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to retrieve claims",
+    });
+  }
+}
+
 // Approve or reject a claim.
 async function reviewClaim(req, res, nextStatus) {
   try {

@@ -909,3 +909,46 @@ textarea:focus-visible {
   opacity: 0.6;
   cursor: not-allowed;
 }
+/* Notifications */
+.notification-list {
+  display: grid;
+  gap: 15px;
+  margin-top: 20px;
+}
+
+.notification-card {
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.notification-card.unread {
+  border-left: 4px solid var(--primary);
+}
+
+.notification-card p {
+  margin: 0 0 10px;
+}
+
+.notification-card small {
+  display: block;
+  margin-bottom: 12px;
+  color: var(--muted);
+}
+
+.notification-count {
+  display: inline-block;
+  min-width: 20px;
+  padding: 2px 6px;
+  margin-left: 5px;
+  border-radius: 12px;
+  background: var(--primary);
+  color: white;
+  font-size: 12px;
+  text-align: center;
+}
+
+.notification-card button {
+  margin-top: 8px;
+}
