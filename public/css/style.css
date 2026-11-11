@@ -375,6 +375,7 @@ select {
   font-size: 13px;
   overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
+  line-clamp: 2;
   -webkit-line-clamp: 2;
 }
 

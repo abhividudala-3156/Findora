@@ -632,6 +632,14 @@
       <a class="nav-link active" href="/">Home</a>
       <a class="nav-link" href="#listings">Browse Items</a>
       <a class="nav-link" href="#report">Report an Item</a>
+     <a
+  class="nav-link"
+  href="#my-claims"
+  id="my-claims-nav"
+  hidden
+>
+  My Claims
+</a>
 
       <a class="nav-link" href="#notifications" id="notifications-nav" hidden>
         Notifications
@@ -830,6 +838,49 @@
         </button>
       </nav>
     </section>
+
+
+<!-- My Claims Section -->
+<section
+  class="my-claims-section section"
+  id="my-claims"
+  hidden
+>
+  <div class="section-heading">
+    <div>
+      <p class="eyebrow">YOUR CLAIM ACTIVITY</p>
+      <h2>My Claims</h2>
+      <p class="muted">
+        Track your claims and confirm successful item recovery.
+      </p>
+    </div>
+
+    <button
+      type="button"
+      class="button button-secondary"
+      id="refresh-my-claims"
+    >
+      Refresh
+    </button>
+  </div>
+
+  <div
+    id="my-claims-list"
+    class="my-claims-list"
+    aria-live="polite"
+  >
+    <p class="loading-message">Your claims will appear here.</p>
+  </div>
+
+  <p
+    id="my-claims-message"
+    class="form-message"
+    role="status"
+    aria-live="polite"
+    hidden
+  ></p>
+</section>
+
 
     <!-- Notifications Section -->
     <section

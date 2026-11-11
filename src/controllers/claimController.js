@@ -181,6 +181,37 @@ export async function getItemClaims(req, res) {
   }
 }
 
+
+// Get claims submitted by the logged-in user.
+export async function getMyClaims(req, res) {
+  try {
+    const claims = await Claim.find({
+      claimant: req.user._id,
+    })
+      .populate(
+        "item",
+        "title type status category campusLocation dateOccurred"
+      )
+      .populate("itemOwner", "name")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return res.status(200).json({
+      success: true,
+      count: claims.length,
+      data: claims,
+    });
+  } catch (error) {
+    console.error("Get my claims error:", error.message);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to retrieve your claims",
+    });
+  }
+}
+
+
 // Approve or reject a claim.
 async function reviewClaim(req, res, nextStatus) {
   try {

@@ -46,6 +46,17 @@ const notificationsSection = document.getElementById("notifications");
 const notificationCount = document.getElementById("notification-count");
 const notificationList = document.getElementById("notification-list");
 
+// My Claims elements
+const myClaimsNav = document.getElementById("my-claims-nav");
+const myClaimsSection = document.getElementById("my-claims");
+const myClaimsList = document.getElementById("my-claims-list");
+
+const refreshMyClaimsButton = document.getElementById(
+  "refresh-my-claims"
+);
+
+const myClaimsMessage = document.getElementById("my-claims-message");
+
 const refreshNotificationsButton = document.getElementById(
   "refresh-notifications"
 );
@@ -245,6 +256,7 @@ function updateAuthenticationUI() {
     submitButton.disabled = false;
   }
     updateNotificationsVisibility();
+    updateMyClaimsVisibility();
 }
 
 function updateNotificationsVisibility() {
@@ -256,6 +268,18 @@ function updateNotificationsVisibility() {
 
   if (notificationsSection) {
     notificationsSection.hidden = !isLoggedIn;
+  }
+}
+
+function updateMyClaimsVisibility() {
+  const isLoggedIn = Boolean(currentUser);
+
+  if (myClaimsNav) {
+    myClaimsNav.hidden = !isLoggedIn;
+  }
+
+  if (myClaimsSection) {
+    myClaimsSection.hidden = !isLoggedIn;
   }
 }
 
@@ -476,7 +500,10 @@ authForm.addEventListener("submit", async (event) => {
 
     currentUser = result.user;
     updateAuthenticationUI();
-    await loadNotifications
+
+    await loadNotifications();
+    await loadItems();
+
     hideAuthSection();
 
     authForm.reset();
@@ -519,6 +546,7 @@ logoutButton.addEventListener("click", async () => {
 
     currentUser = null;
     updateAuthenticationUI();
+    await loadItems();
 
       if (notificationList) {
       notificationList.replaceChildren();
@@ -613,6 +641,7 @@ function formatDate(dateValue) {
 // ==========================================
 
 
+
 function createItemCard(item) {
   const article = document.createElement("article");
   article.className = "item-card";
@@ -693,7 +722,7 @@ function createItemCard(item) {
   meta.append(location, date);
   content.append(top, title, description, meta);
 
-  // Claim option is available only for active found items.
+  // Identify the item owner and current user.
   const currentUserId = String(
     currentUser?.id || currentUser?._id || ""
   );
@@ -702,10 +731,8 @@ function createItemCard(item) {
     item.owner?._id || item.owner || ""
   );
 
-   console.log("Current user:", currentUser);
-  console.log("Current user ID:", currentUserId);
-  console.log("Item owner ID:", itemOwnerId);
-
+  // Allow claims only on active found items
+  // that do not belong to the logged-in user.
   const canClaim =
     item.type === "found" &&
     item.status === "active" &&
@@ -721,7 +748,6 @@ function createItemCard(item) {
     claimButton.type = "button";
 
     claimButton.addEventListener("click", () => {
-      // Ask unauthenticated visitors to log in.
       if (!currentUser) {
         showAuthSection();
 
@@ -734,7 +760,6 @@ function createItemCard(item) {
         return;
       }
 
-      // Avoid displaying the form more than once.
       if (content.querySelector(".claim-form")) {
         return;
       }
@@ -762,6 +787,7 @@ function createItemCard(item) {
         "form-message",
         ""
       );
+
       claimMessage.hidden = true;
       claimMessage.setAttribute("role", "status");
 
@@ -773,6 +799,7 @@ function createItemCard(item) {
         "claim-submit-button",
         "Submit Claim"
       );
+
       submitClaimButton.type = "submit";
 
       const cancelButton = createTextElement(
@@ -780,6 +807,7 @@ function createItemCard(item) {
         "claim-cancel-button",
         "Cancel"
       );
+
       cancelButton.type = "button";
 
       cancelButton.addEventListener("click", () => {
@@ -812,6 +840,7 @@ function createItemCard(item) {
             "Your explanation must contain 10–1000 characters.",
             "error"
           );
+
           return;
         }
 
@@ -853,37 +882,204 @@ function createItemCard(item) {
     content.append(claimButton);
   }
 
-  // Show claim review option only to the item owner.
-const canReviewClaims =
-  currentUser &&
-  item.type === "found" &&
-  itemOwnerId === currentUserId;
+  // Only the owner of a found item can review its claims.
+  const canReviewClaims =
+    Boolean(currentUser) &&
+    item.type === "found" &&
+    itemOwnerId === currentUserId;
 
-  console.log("Can review claims:", {
-  title: item.title,
-  type: item.type,
-  canReviewClaims,
-});
+  if (canReviewClaims) {
+    const reviewClaimsButton = createTextElement(
+      "button",
+      "button button-secondary review-claims-button",
+      "Review Claims"
+    );
 
-if (canReviewClaims) {
-  const reviewClaimsButton = createTextElement(
-    "button",
-    "review-claims-button",
-    "Review Claims"
-  );
+    reviewClaimsButton.type = "button";
 
-  reviewClaimsButton.type = "button";
+    reviewClaimsButton.addEventListener("click", () => {
+      loadItemClaims(item._id, content);
+    });
 
-  reviewClaimsButton.addEventListener("click", () => {
-    loadItemClaims(item._id, content);
-  });
-
-  content.append(reviewClaimsButton);
-}
+    content.append(reviewClaimsButton);
+  }
 
   article.append(content);
 
   return article;
+}
+
+
+// Load claims submitted for an item.
+
+// Load claims submitted by the logged-in user.
+async function loadMyClaims() {
+  if (!currentUser || !myClaimsList) {
+    return;
+  }
+
+  myClaimsList.textContent = "Loading your claims...";
+
+  try {
+    const response = await fetch("/api/items/my-claims", {
+      method: "GET",
+      credentials: "same-origin",
+      headers: {
+        Accept: "application/json",
+      },
+    });
+
+    const result = await readJsonResponse(response);
+
+    myClaimsList.textContent = "";
+
+    if (!result.data || result.data.length === 0) {
+      myClaimsList.append(
+        createTextElement("p", "", "You have not submitted any claims yet.")
+      );
+      return;
+    }
+
+    result.data.forEach((claim) => {
+      const card = document.createElement("div");
+      card.className = "claim-review-card";
+
+      const item = claim.item;
+
+      const title = createTextElement(
+        "h3",
+        "",
+        item?.title || "Item details unavailable"
+      );
+
+      const itemType = createTextElement(
+        "p",
+        "",
+        `Type: ${item?.type || "Unknown"}`
+      );
+
+      const itemStatus = createTextElement(
+        "p",
+        "",
+        `Item status: ${item?.status || "Unavailable"}`
+      );
+
+      const owner = createTextElement(
+        "p",
+        "",
+        `Item owner: ${claim.itemOwner?.name || "Unknown"}`
+      );
+
+      const claimStatus = createTextElement(
+        "p",
+        "claim-status",
+        `Claim status: ${claim.status}`
+      );
+
+      card.append(title, itemType, itemStatus, owner, claimStatus);
+
+      // Show recovery confirmation only for approved claims.
+      if (claim.status === "approved") {
+        const claimantStatus = createTextElement(
+          "p",
+          "",
+          `Your confirmation: ${
+            claim.returnConfirmedByClaimant ? "Confirmed" : "Pending"
+          }`
+        );
+
+        const ownerStatus = createTextElement(
+          "p",
+          "",
+          `Owner confirmation: ${
+            claim.returnConfirmedByOwner ? "Confirmed" : "Pending"
+          }`
+        );
+
+        card.append(claimantStatus, ownerStatus);
+
+        if (
+          claim.returnConfirmedByClaimant &&
+          claim.returnConfirmedByOwner
+        ) {
+          card.append(
+            createTextElement(
+              "p",
+              "claim-status",
+              "Recovery completed successfully."
+            )
+          );
+        } else if (
+          item &&
+          item.status === "claimed" &&
+          !claim.returnConfirmedByClaimant
+        ) {
+          const confirmButton = createTextElement(
+            "button",
+            "button button-primary",
+            "Confirm Item Received"
+          );
+
+          confirmButton.type = "button";
+
+          confirmButton.addEventListener("click", async () => {
+            if (
+              !window.confirm(
+                "Confirm that you have received the item from its owner?"
+              )
+            ) {
+              return;
+            }
+
+            confirmButton.disabled = true;
+            confirmButton.textContent = "Confirming...";
+
+            try {
+              const confirmation = await patchJson(
+                `/api/items/${encodeURIComponent(item._id)}/claims/${encodeURIComponent(claim._id)}/confirm-recovery`,
+                {}
+              );
+
+              showMessage(
+                myClaimsMessage,
+                confirmation.message ||
+                  "Your recovery confirmation was recorded.",
+                "success"
+              );
+
+              await loadMyClaims();
+              await loadItems();
+            } catch (error) {
+              showMessage(
+                myClaimsMessage,
+                error.message || "Could not confirm recovery.",
+                "error"
+              );
+
+              confirmButton.disabled = false;
+              confirmButton.textContent = "Confirm Item Received";
+            }
+          });
+
+          card.append(confirmButton);
+        }
+      }
+
+      myClaimsList.append(card);
+    });
+  } catch (error) {
+    myClaimsList.textContent = "";
+
+    myClaimsList.append(
+      createTextElement(
+        "p",
+        "form-message error",
+        error.message || "Unable to load your claims."
+      )
+    );
+
+    console.error("Load my claims error:", error);
+  }
 }
 
 // Load claims submitted for an item.
@@ -946,6 +1142,210 @@ async function loadItemClaims(itemId, content) {
         );
 
         claimCard.append(claimant, message, status);
+
+
+        // Show recovery confirmation details for approved claims.
+        if (claim.status === "approved") {
+          const claimantConfirmation = createTextElement(
+            "p",
+            "",
+            `Claimant confirmation: ${
+              claim.returnConfirmedByClaimant ? "Confirmed" : "Pending"
+            }`
+          );
+
+          const ownerConfirmation = createTextElement(
+            "p",
+            "",
+            `Your confirmation: ${
+              claim.returnConfirmedByOwner ? "Confirmed" : "Pending"
+            }`
+          );
+
+          claimCard.append(
+            claimantConfirmation,
+            ownerConfirmation
+          );
+
+          if (
+            claim.returnConfirmedByClaimant &&
+            claim.returnConfirmedByOwner
+          ) {
+            claimCard.append(
+              createTextElement(
+                "p",
+                "claim-status",
+                "Recovery completed successfully."
+              )
+            );
+          } else if (!claim.returnConfirmedByOwner) {
+            const confirmHandoverButton = createTextElement(
+              "button",
+              "button button-primary",
+              "Confirm Handover"
+            );
+
+            confirmHandoverButton.type = "button";
+
+            const recoveryMessage = createTextElement(
+              "p",
+              "form-message",
+              ""
+            );
+
+            recoveryMessage.hidden = true;
+            recoveryMessage.setAttribute("role", "status");
+
+            confirmHandoverButton.addEventListener(
+              "click",
+              async () => {
+                if (
+                  !window.confirm(
+                    "Confirm that you have handed over the item to the claimant?"
+                  )
+                ) {
+                  return;
+                }
+
+                confirmHandoverButton.disabled = true;
+                confirmHandoverButton.textContent = "Confirming...";
+
+                try {
+                  const response = await patchJson(
+                    `/api/items/${encodeURIComponent(itemId)}/claims/${encodeURIComponent(claim._id)}/confirm-recovery`,
+                    {}
+                  );
+
+                  showMessage(
+                    recoveryMessage,
+                    response.message ||
+                      "Your handover confirmation was recorded.",
+                    "success"
+                  );
+
+                  await loadItems();
+
+                  // Refresh the claims section with updated confirmation status.
+                  claimsSection.remove();
+                  await loadItemClaims(itemId, content);
+                } catch (error) {
+                  showMessage(
+                    recoveryMessage,
+                    error.message || "Unable to confirm handover.",
+                    "error"
+                  );
+
+                  confirmHandoverButton.disabled = false;
+                  confirmHandoverButton.textContent = "Confirm Handover";
+                }
+              }
+            );
+
+            claimCard.append(
+              confirmHandoverButton,
+              recoveryMessage
+            );
+          }
+        }
+
+
+        // Only pending claims can be approved or rejected.
+        if (claim.status === "pending") {
+          const actions = document.createElement("div");
+          actions.className = "claim-actions";
+
+          const approveButton = createTextElement(
+            "button",
+            "button button-primary",
+            "Approve"
+          );
+
+          approveButton.type = "button";
+
+          const rejectButton = createTextElement(
+            "button",
+            "button button-secondary",
+            "Reject"
+          );
+
+          rejectButton.type = "button";
+
+          const reviewMessage = createTextElement(
+            "p",
+            "form-message",
+            ""
+          );
+
+          reviewMessage.hidden = true;
+          reviewMessage.setAttribute("role", "status");
+
+          async function reviewClaim(action) {
+            const actionText =
+              action === "approve" ? "approve" : "reject";
+
+            if (
+              !window.confirm(
+                `Are you sure you want to ${actionText} this claim?`
+              )
+            ) {
+              return;
+            }
+
+            approveButton.disabled = true;
+            rejectButton.disabled = true;
+
+            try {
+              const response = await patchJson(
+                `/api/items/${encodeURIComponent(itemId)}/claims/${encodeURIComponent(claim._id)}/${action}`,
+                {}
+              );
+
+              showMessage(
+                reviewMessage,
+                response.message || `Claim ${actionText}d successfully.`,
+                "success"
+              );
+
+              // Refresh the claim list to display the updated status.
+              const refreshButton = createTextElement(
+                "button",
+                "button button-secondary",
+                "Refresh Claims"
+              );
+
+              refreshButton.type = "button";
+
+              refreshButton.addEventListener("click", () => {
+                claimsSection.remove();
+                loadItemClaims(itemId, content);
+              });
+
+              actions.replaceChildren(refreshButton);
+            } catch (error) {
+              showMessage(
+                reviewMessage,
+                error.message || `Unable to ${actionText} claim.`,
+                "error"
+              );
+
+              approveButton.disabled = false;
+              rejectButton.disabled = false;
+            }
+          }
+
+          approveButton.addEventListener("click", () => {
+            reviewClaim("approve");
+          });
+
+          rejectButton.addEventListener("click", () => {
+            reviewClaim("reject");
+          });
+
+          actions.append(approveButton, rejectButton);
+
+          claimCard.append(actions, reviewMessage);
+        }
+
         claimsSection.append(claimCard);
       });
     }
@@ -959,6 +1359,7 @@ async function loadItemClaims(itemId, content) {
     );
   }
 }
+
 // ==========================================
 // 13. DISPLAY ITEMS
 // ==========================================
@@ -1263,6 +1664,21 @@ if (refreshNotificationsButton) {
   });
 }
 
+// My Claims event listeners
+if (refreshMyClaimsButton) {
+  refreshMyClaimsButton.addEventListener("click", () => {
+    hideMessage(myClaimsMessage);
+    loadMyClaims();
+  });
+}
+
+if (myClaimsNav) {
+  myClaimsNav.addEventListener("click", () => {
+    hideMessage(myClaimsMessage);
+    loadMyClaims();
+  });
+}
+
 if (notificationsNav) {
   notificationsNav.addEventListener("click", () => {
     loadNotifications();
@@ -1272,15 +1688,14 @@ if (notificationsNav) {
 // 19. INITIALIZE THE PAGE
 // ==========================================
 
+
 async function initializePage() {
   updateAuthenticationUI();
 
-  // Load public listings immediately; session restoration
-  // happens alongside it.
-  const sessionCheck = restoreSession();
-  const itemLoad = loadItems();
+  // Step 1: Restore the logged-in user's session.
+  await restoreSession();
 
-  await Promise.allSettled([sessionCheck, itemLoad]);
+  // Step 2: Load items after session restoration.
+  await loadItems();
 }
-
 initializePage();

@@ -232,15 +232,15 @@ export async function getItems(req, res) {
 
     const skip = (pageNumber - 1) * pageSize;
 
-    const [items, totalItems] = await Promise.all([
-      Item.find(filter)
-        .sort(sortOptions[sort])
-        .skip(skip)
-        .limit(pageSize)
-        .lean(),
-      Item.countDocuments(filter),
-    ]);
-
+ const [items, totalItems] = await Promise.all([
+  Item.find(filter)
+    .populate("owner", "_id")
+    .sort(sortOptions[sort])
+    .skip(skip)
+    .limit(pageSize)
+    .lean(),
+  Item.countDocuments(filter),
+]);
     return res.status(200).json({
       success: true,
       data: items,
