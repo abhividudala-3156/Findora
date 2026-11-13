@@ -953,3 +953,48 @@ textarea:focus-visible {
 .notification-card button {
   margin-top: 8px;
 }
+
+
+/* Admin Report Rejection Form */
+.rejection-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  background-color: #f9fafb;
+}
+
+.rejection-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.rejection-form textarea {
+  width: 100%;
+  min-height: 100px;
+  padding: 12px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font: inherit;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.rejection-form textarea:focus {
+  outline: none;
+  border-color: #2563eb;
+}
+
+.rejection-form button {
+  align-self: flex-start;
+}
+
+.rejection-form button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

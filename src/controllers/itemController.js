@@ -176,7 +176,10 @@ export async function getItems(req, res) {
       });
     }
 
-    const filter = {};
+    // Public listings must contain only admin-approved reports.
+const filter = {
+  moderationStatus: "approved",
+};
 
     if (status !== "all") {
       filter.status = status;
@@ -265,7 +268,10 @@ export async function getItemById(req, res) {
       });
     }
 
-    const item = await Item.findById(req.params.id).lean();
+    const item = await Item.findOne({
+  _id: req.params.id,
+  moderationStatus: "approved",
+}).lean();
 
     if (!item) {
       return res.status(404).json({
@@ -294,9 +300,10 @@ export async function getItemImage(req, res, next) {
       });
     }
 
-    const item = await Item.findById(id).select(
-      "imageFilename imagePublicId imageUrl"
-    );
+    const item = await Item.findOne({
+  _id: id,
+  moderationStatus: "approved",
+}).select("imageFilename imagePublicId imageUrl");
 
     if (!item) {
       return res.status(404).json({
@@ -413,9 +420,24 @@ export async function updateItem(req, res) {
       });
     }
 
-    // owner is intentionally excluded from UPDATE_FIELDS.
-    item.set(updates);
-    await item.save();
+   // Only active reports can be edited.
+if (item.status !== "active") {
+  return res.status(409).json({
+    success: false,
+    message: "Only active reports can be updated",
+  });
+}
+
+// Owner is intentionally excluded from UPDATE_FIELDS.
+item.set(updates);
+
+// Send edited reports back for admin review.
+item.moderationStatus = "pending";
+item.reviewedBy = null;
+item.reviewedAt = null;
+item.moderationReason = "";
+
+await item.save();
 
     return res.status(200).json({
       success: true,
@@ -459,11 +481,17 @@ export async function uploadItemImage(req, res, next) {
     const previousFilename = item.imageFilename;
 
     // Save the persistent Cloudinary reference in MongoDB.
-    item.imageUrl = uploadedImage.imageUrl;
-    item.imagePublicId = uploadedImage.imagePublicId;
-    item.imageFilename = "";
+      item.imageUrl = uploadedImage.imageUrl;
+item.imagePublicId = uploadedImage.imagePublicId;
+item.imageFilename = "";
 
-    await item.save();
+// Send the updated image for admin review.
+item.moderationStatus = "pending";
+item.reviewedBy = null;
+item.reviewedAt = null;
+item.moderationReason = "";
+
+await item.save();
 
     // Remove the previous Cloudinary image after the database save.
     if (

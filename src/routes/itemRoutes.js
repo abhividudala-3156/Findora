@@ -17,7 +17,10 @@ import upload, {
   handleImageUploadError,
 } from "../middleware/imageUpload.js";
 
-import { requireAuth } from "../middleware/auth.js";
+import {
+  requireAuth,
+  requireAdmin,
+} from "../middleware/auth.js";
 
 import {
   createClaim,
@@ -28,13 +31,43 @@ import {
   confirmRecovery,
 } from "../controllers/claimController.js";
 
+import {
+  getPendingReports,
+  approveReport,
+  rejectReport,
+} from "../controllers/adminController.js";
+
 const router = Router();
 
 // Public routes
 router.get("/", getItems);
 
-// My Claims must be registered before /:id.
+// My Claims
 router.get("/my-claims", requireAuth, getMyClaims);
+
+// Admin review routes
+// These will be connected to the admin controller next.
+// Admin review routes
+router.get(
+  "/admin/review",
+  requireAuth,
+  requireAdmin,
+  getPendingReports
+);
+
+router.patch(
+  "/admin/review/:id/approve",
+  requireAuth,
+  requireAdmin,
+  approveReport
+);
+
+router.patch(
+  "/admin/review/:id/reject",
+  requireAuth,
+  requireAdmin,
+  rejectReport
+);
 
 // Public item details
 router.get("/:id", getItemById);

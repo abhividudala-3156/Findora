@@ -641,6 +641,15 @@
   My Claims
 </a>
 
+<a
+  class="nav-link"
+  href="#admin-review"
+  id="admin-review-nav"
+  hidden
+>
+  Admin Review
+</a>
+
       <a class="nav-link" href="#notifications" id="notifications-nav" hidden>
         Notifications
         <span id="notification-count" class="notification-count" hidden>0</span>
@@ -922,6 +931,48 @@
         hidden
       ></p>
     </section>
+    <!-- Admin Review Queue -->
+<section
+  class="admin-review-section section"
+  id="admin-review"
+  hidden
+>
+  <div class="section-heading">
+    <div>
+      <p class="eyebrow">ADMINISTRATION</p>
+      <h2>Admin Review Queue</h2>
+      <p class="muted">
+        Review newly submitted lost and found reports.
+      </p>
+    </div>
+
+    <button
+      type="button"
+      class="button button-secondary"
+      id="refresh-admin-reports"
+    >
+      Refresh
+    </button>
+  </div>
+
+  <div
+    id="admin-review-list"
+    class="admin-review-list"
+    aria-live="polite"
+  >
+    <p class="loading-message">
+      Pending reports will appear here.
+    </p>
+  </div>
+
+  <p
+    id="admin-review-message"
+    class="form-message"
+    role="status"
+    aria-live="polite"
+    hidden
+  ></p>
+</section>
 
     <!-- Report Item Section -->
     <section class="report-section section" id="report">

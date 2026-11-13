@@ -63,6 +63,20 @@ const refreshNotificationsButton = document.getElementById(
 
 const notificationMessage = document.getElementById("notification-message");
 
+
+// Admin Review elements
+const adminReviewNav = document.getElementById("admin-review-nav");
+const adminReviewSection = document.getElementById("admin-review");
+const adminReviewList = document.getElementById("admin-review-list");
+
+const refreshAdminReportsButton = document.getElementById(
+  "refresh-admin-reports"
+);
+
+const adminReviewMessage = document.getElementById(
+  "admin-review-message"
+);
+
 // ==========================================
 // 2. APPLICATION STATE
 // ==========================================
@@ -257,6 +271,7 @@ function updateAuthenticationUI() {
   }
     updateNotificationsVisibility();
     updateMyClaimsVisibility();
+    updateAdminReviewVisibility();
 }
 
 function updateNotificationsVisibility() {
@@ -282,6 +297,282 @@ function updateMyClaimsVisibility() {
     myClaimsSection.hidden = !isLoggedIn;
   }
 }
+
+function updateAdminReviewVisibility() {
+  const isAdmin = currentUser?.role === "admin";
+
+  if (adminReviewNav) {
+    adminReviewNav.hidden = !isAdmin;
+  }
+
+  if (adminReviewSection) {
+    adminReviewSection.hidden = !isAdmin;
+  }
+}
+
+
+async function loadPendingReports() {
+
+  if (!currentUser || currentUser.role !== "admin" || !adminReviewList) {
+    return;
+  }
+
+  hideMessage(adminReviewMessage);
+  adminReviewList.textContent = "Loading pending reports...";
+
+  try {
+    const response = await fetch("/api/items/admin/review", {
+      method: "GET",
+      credentials: "same-origin",
+      headers: {
+        Accept: "application/json"
+      }
+    });
+
+    const result = await readJsonResponse(response);
+
+    displayPendingReports(result.data || []);
+
+  } catch (error) {
+    adminReviewList.textContent = "Unable to load pending reports.";
+
+    showMessage(
+      adminReviewMessage,
+      error.message || "Could not load the review queue.",
+      "error"
+    );
+
+    console.error("Failed to load pending reports:", error);
+  }
+}
+
+
+
+function displayPendingReports(reports) {
+  adminReviewList.replaceChildren();
+
+  if (reports.length === 0) {
+    adminReviewList.append(
+      createTextElement(
+        "p",
+        "empty-message",
+        "There are no reports waiting for review."
+      )
+    );
+
+    return;
+  }
+
+  reports.forEach((item) => {
+    const card = document.createElement("article");
+    card.className = "admin-review-card";
+
+    const title = createTextElement(
+      "h3",
+      "",
+      item.title || "Untitled report"
+    );
+
+    const type = createTextElement(
+      "p",
+      "",
+      `Type: ${item.type || "Unknown"}`
+    );
+
+    const category = createTextElement(
+      "p",
+      "",
+      `Category: ${item.category || "Unknown"}`
+    );
+
+    const description = createTextElement(
+      "p",
+      "",
+      `Description: ${item.description || "Not provided"}`
+    );
+
+    const location = createTextElement(
+      "p",
+      "",
+      `Location: ${item.campusLocation || "Unknown"}`
+    );
+
+    const date = createTextElement(
+      "p",
+      "",
+      `Reported date: ${formatDate(item.dateOccurred)}`
+    );
+
+    const owner = createTextElement(
+      "p",
+      "",
+      `Submitted by: ${item.owner?.name || "Unknown"}`
+    );
+
+    card.append(
+      title,
+      type,
+      category,
+      description,
+      location,
+      date,
+      owner
+    );
+
+    const actions = document.createElement("div");
+    actions.className = "claim-actions";
+
+    const approveButton = createTextElement(
+      "button",
+      "button button-primary",
+      "Approve"
+    );
+
+    approveButton.type = "button";
+
+    const rejectButton = createTextElement(
+      "button",
+      "button button-secondary",
+      "Reject"
+    );
+
+    rejectButton.type = "button";
+
+    // Approve report
+    approveButton.addEventListener("click", async () => {
+      if (!window.confirm("Approve this report?")) {
+        return;
+      }
+
+      approveButton.disabled = true;
+      rejectButton.disabled = true;
+
+      try {
+        const result = await patchJson(
+          `/api/items/admin/review/${encodeURIComponent(item._id)}/approve`,
+          {}
+        );
+
+        showMessage(
+          adminReviewMessage,
+          result.message || "Report approved successfully.",
+          "success"
+        );
+
+        await loadPendingReports();
+        await loadItems();
+
+      } catch (error) {
+        showMessage(
+          adminReviewMessage,
+          error.message || "Unable to approve this report.",
+          "error"
+        );
+
+        approveButton.disabled = false;
+        rejectButton.disabled = false;
+      }
+    });
+
+    // Reject report
+    rejectButton.addEventListener("click", () => {
+      const reasonForm = document.createElement("div");
+      reasonForm.className = "rejection-form";
+
+      const reasonLabel = createTextElement(
+        "label",
+        "",
+        "Reason for rejection"
+      );
+
+      const reasonInput = document.createElement("textarea");
+      reasonInput.placeholder = "Enter the rejection reason";
+      reasonInput.maxLength = 500;
+      reasonInput.required = true;
+
+      const submitButton = createTextElement(
+        "button",
+        "button button-primary",
+        "Confirm Rejection"
+      );
+
+      submitButton.type = "button";
+
+      const cancelButton = createTextElement(
+        "button",
+        "button button-secondary",
+        "Cancel"
+      );
+
+      cancelButton.type = "button";
+
+      reasonLabel.append(reasonInput);
+
+      reasonForm.append(
+        reasonLabel,
+        submitButton,
+        cancelButton
+      );
+
+      card.append(reasonForm);
+
+      rejectButton.disabled = true;
+
+      cancelButton.addEventListener("click", () => {
+        reasonForm.remove();
+        rejectButton.disabled = false;
+      });
+
+      submitButton.addEventListener("click", async () => {
+        const reason = reasonInput.value.trim();
+
+        if (!reason) {
+          showMessage(
+            adminReviewMessage,
+            "A rejection reason is required.",
+            "error"
+          );
+          return;
+        }
+
+        submitButton.disabled = true;
+        cancelButton.disabled = true;
+
+        try {
+          const result = await patchJson(
+            `/api/items/admin/review/${encodeURIComponent(item._id)}/reject`,
+            { reason }
+          );
+
+          showMessage(
+            adminReviewMessage,
+            result.message || "Report rejected successfully.",
+            "success"
+          );
+
+          await loadPendingReports();
+
+        } catch (error) {
+          showMessage(
+            adminReviewMessage,
+            error.message || "Unable to reject this report.",
+            "error"
+          );
+
+          submitButton.disabled = false;
+          cancelButton.disabled = false;
+        }
+      });
+    });
+
+    actions.append(approveButton, rejectButton);
+    card.append(actions);
+
+    adminReviewList.append(card);
+  });
+}
+
+
 
 function updateNotificationCount(notifications) {
   if (!notificationCount) return;
@@ -503,6 +794,10 @@ authForm.addEventListener("submit", async (event) => {
 
     await loadNotifications();
     await loadItems();
+
+    if (currentUser?.role === "admin") {
+  await loadPendingReports();
+}
 
     hideAuthSection();
 
@@ -1082,6 +1377,7 @@ async function loadMyClaims() {
   }
 }
 
+
 // Load claims submitted for an item.
 async function loadItemClaims(itemId, content) {
   try {
@@ -1143,7 +1439,6 @@ async function loadItemClaims(itemId, content) {
 
         claimCard.append(claimant, message, status);
 
-
         // Show recovery confirmation details for approved claims.
         if (claim.status === "approved") {
           const claimantConfirmation = createTextElement(
@@ -1199,11 +1494,11 @@ async function loadItemClaims(itemId, content) {
             confirmHandoverButton.addEventListener(
               "click",
               async () => {
-                if (
-                  !window.confirm(
-                    "Confirm that you have handed over the item to the claimant?"
-                  )
-                ) {
+                  if (
+                    !window.confirm(
+                      "Confirm that you have handed over the item to the claimant?"
+                    )
+                  ) {
                   return;
                 }
 
@@ -1225,9 +1520,10 @@ async function loadItemClaims(itemId, content) {
 
                   await loadItems();
 
-                  // Refresh the claims section with updated confirmation status.
+                  // Refresh claims with updated confirmation status.
                   claimsSection.remove();
                   await loadItemClaims(itemId, content);
+
                 } catch (error) {
                   showMessage(
                     recoveryMessage,
@@ -1247,7 +1543,6 @@ async function loadItemClaims(itemId, content) {
             );
           }
         }
-
 
         // Only pending claims can be approved or rejected.
         if (claim.status === "pending") {
@@ -1279,17 +1574,10 @@ async function loadItemClaims(itemId, content) {
           reviewMessage.hidden = true;
           reviewMessage.setAttribute("role", "status");
 
-          async function reviewClaim(action) {
+          // Submit the claim review request.
+          async function submitClaimReview(action, data, reasonForm = null) {
             const actionText =
               action === "approve" ? "approve" : "reject";
-
-            if (
-              !window.confirm(
-                `Are you sure you want to ${actionText} this claim?`
-              )
-            ) {
-              return;
-            }
 
             approveButton.disabled = true;
             rejectButton.disabled = true;
@@ -1297,7 +1585,7 @@ async function loadItemClaims(itemId, content) {
             try {
               const response = await patchJson(
                 `/api/items/${encodeURIComponent(itemId)}/claims/${encodeURIComponent(claim._id)}/${action}`,
-                {}
+                data
               );
 
               showMessage(
@@ -1321,6 +1609,12 @@ async function loadItemClaims(itemId, content) {
               });
 
               actions.replaceChildren(refreshButton);
+
+              // Replace the rejection form with the refresh button.
+              if (reasonForm) {
+                reasonForm.replaceWith(actions);
+              }
+
             } catch (error) {
               showMessage(
                 reviewMessage,
@@ -1330,7 +1624,103 @@ async function loadItemClaims(itemId, content) {
 
               approveButton.disabled = false;
               rejectButton.disabled = false;
+
+              return false;
             }
+
+            return true;
+          }
+
+          // Approve or reject a claim.
+          async function reviewClaim(action) {
+            if (action === "approve") {
+              if (
+                !window.confirm(
+                  "Are you sure you want to approve this claim?"
+                )
+              ) {
+                return;
+              }
+
+              await submitClaimReview("approve", {});
+              return;
+            }
+
+            // Create inline rejection form.
+            const reasonForm = document.createElement("div");
+            reasonForm.className = "rejection-form";
+
+            const reasonLabel = createTextElement(
+              "label",
+              "",
+              "Reason for rejecting this claim"
+            );
+
+            const reasonInput = document.createElement("textarea");
+            reasonInput.placeholder = "Enter the rejection reason";
+            reasonInput.maxLength = 500;
+            reasonInput.required = true;
+
+            const confirmButton = createTextElement(
+              "button",
+              "button button-primary",
+              "Confirm Rejection"
+            );
+
+            confirmButton.type = "button";
+
+            const cancelButton = createTextElement(
+              "button",
+              "button button-secondary",
+              "Cancel"
+            );
+
+            cancelButton.type = "button";
+
+            reasonLabel.append(reasonInput);
+
+            reasonForm.append(
+              reasonLabel,
+              confirmButton,
+              cancelButton
+            );
+
+            actions.replaceWith(reasonForm);
+
+            reasonInput.focus();
+
+            // Cancel rejection.
+            cancelButton.addEventListener("click", () => {
+              reasonForm.replaceWith(actions);
+            });
+
+            // Confirm rejection.
+            confirmButton.addEventListener("click", async () => {
+              const reason = reasonInput.value.trim();
+
+              if (!reason) {
+                showMessage(
+                  reviewMessage,
+                  "A rejection reason is required.",
+                  "error"
+                );
+                return;
+              }
+
+              confirmButton.disabled = true;
+              cancelButton.disabled = true;
+
+              const success = await submitClaimReview(
+                "reject",
+                { reason },
+                reasonForm
+              );
+
+              if (!success) {
+                confirmButton.disabled = false;
+                cancelButton.disabled = false;
+              }
+            });
           }
 
           approveButton.addEventListener("click", () => {
@@ -1351,6 +1741,7 @@ async function loadItemClaims(itemId, content) {
     }
 
     content.append(claimsSection);
+
   } catch (error) {
     showMessage(
       authMessage,
@@ -1684,6 +2075,20 @@ if (notificationsNav) {
     loadNotifications();
   });
 }
+
+// Admin Review event listeners
+if (refreshAdminReportsButton) {
+  refreshAdminReportsButton.addEventListener("click", () => {
+    loadPendingReports();
+  });
+}
+
+if (adminReviewNav) {
+  adminReviewNav.addEventListener("click", () => {
+    loadPendingReports();
+  });
+}
+
 // ==========================================
 // 19. INITIALIZE THE PAGE
 // ==========================================
@@ -1697,5 +2102,11 @@ async function initializePage() {
 
   // Step 2: Load items after session restoration.
   await loadItems();
+
+  // Step 3: Load pending reports for administrators.
+  if (currentUser?.role === "admin") {
+    await loadPendingReports();
+  }
 }
+
 initializePage();

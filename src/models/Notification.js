@@ -1,3 +1,4 @@
+
 import mongoose from "mongoose";
 
 const notificationSchema = new mongoose.Schema(
@@ -17,6 +18,8 @@ const notificationSchema = new mongoose.Schema(
         "claim_approved",
         "claim_rejected",
         "recovery_confirmed",
+        "report_approved",
+        "report_rejected",
       ],
     },
 
@@ -31,7 +34,7 @@ const notificationSchema = new mongoose.Schema(
     claim: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Claim",
-      required: true,
+      default: null,
     },
 
     item: {

@@ -62,22 +62,24 @@ const itemSchema = new mongoose.Schema(
     },
 
     imageUrl: {
-  type: String,
-  trim: true,
-  maxlength: 2048,
-  default: "",
-},
+      type: String,
+      trim: true,
+      maxlength: 2048,
+      default: ""
+    },
 
-imageFilename: {
-  type: String,
-  trim: true,
-  default: "",
-},
-imagePublicId: {
-  type: String,
-  trim: true,
-  default: "",
-},
+    imageFilename: {
+      type: String,
+      trim: true,
+      default: ""
+    },
+
+    imagePublicId: {
+      type: String,
+      trim: true,
+      default: ""
+    },
+
     contactName: {
       type: String,
       required: [true, "Contact name is required"],
@@ -97,7 +99,6 @@ imagePublicId: {
       ]
     },
 
-    
     owner: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -105,6 +106,7 @@ imagePublicId: {
       index: true
     },
 
+    // Existing item recovery status
     status: {
       type: String,
       enum: {
@@ -112,8 +114,38 @@ imagePublicId: {
         message: "Status must be active, claimed, or resolved"
       },
       default: "active"
+    },
+
+    // Admin moderation status
+    moderationStatus: {
+      type: String,
+      enum: ["pending", "approved", "rejected"],
+      default: "pending",
+      index: true
+    },
+
+    // Admin who reviewed the report
+    reviewedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null
+    },
+
+    // Date and time of moderation
+    reviewedAt: {
+      type: Date,
+      default: null
+    },
+
+    // Reason provided by admin
+    moderationReason: {
+      type: String,
+      trim: true,
+      maxlength: [500, "Moderation reason cannot exceed 500 characters"],
+      default: ""
     }
   },
+
   {
     timestamps: true,
     versionKey: false

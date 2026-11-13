@@ -37,6 +37,14 @@ export async function createClaim(req, res) {
       });
     }
 
+    // Only approved reports can receive claims.
+if (item.moderationStatus !== "approved") {
+  return res.status(403).json({
+    success: false,
+    message: "This report has not been approved for claims",
+  });
+}
+
     if (item.status !== "active") {
       return res.status(409).json({
         success: false,
@@ -235,6 +243,13 @@ async function reviewClaim(req, res, nextStatus) {
         message: "Item not found",
       });
     }
+    // Claims can only be reviewed for approved reports.
+if (item.moderationStatus !== "approved") {
+  return res.status(403).json({
+    success: false,
+    message: "Claims cannot be reviewed for an unapproved report",
+  });
+}
 
     if (
       !item.owner ||
