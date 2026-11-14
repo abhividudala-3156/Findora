@@ -298,6 +298,24 @@ describe("Findora API", () => {
     assert.equal(response.status, 401);
     assert.equal(response.body.success, false);
   });
+    it("should reject item creation without a CSRF token", async () => {
+    const response = await agent
+      .post("/api/items")
+      .send(createValidItem());
+
+    assert.equal(response.status, 403);
+    assert.equal(response.body.success, false);
+  });
+
+  it("should reject item creation with an invalid CSRF token", async () => {
+    const response = await agent
+      .post("/api/items")
+      .set("x-csrf-token", "invalid-csrf-token")
+      .send(createValidItem());
+
+    assert.equal(response.status, 403);
+    assert.equal(response.body.success, false);
+  });
 
   it("should assign ownership from the session, not the request body", async () => {
     const anotherUserId = new mongoose.Types.ObjectId().toString();
@@ -557,6 +575,19 @@ describe("Findora API", () => {
       response.body.data.owner.toString(),
       currentUserId
     );
+  });
+
+    it("should reject item updates without a CSRF token", async () => {
+    const item = await createItem();
+
+    const response = await agent
+      .patch(`/api/items/${item._id}`)
+      .send({ title: "Changed without CSRF token" });
+
+    assert.equal(response.status, 403);
+
+    const savedItem = await Item.findById(item._id);
+    assert.equal(savedItem.title, item.title);
   });
 
   it("should reject updates without authentication", async () => {
@@ -1642,6 +1673,29 @@ it("prevents a claimant from confirming recovery twice", async () => {
       .send({});
 
     assert.equal(response.status, 400);
+
+    const savedItem = await Item.findById(itemId);
+    assert.equal(savedItem.moderationStatus, "pending");
+  });
+    it("rejects admin approval without a CSRF token", async () => {
+    const itemResponse = await agent
+      .post("/api/items")
+      .set("x-csrf-token", csrfToken)
+      .send(createValidItem());
+
+    assert.equal(itemResponse.status, 201);
+
+    const itemId = itemResponse.body.data._id;
+
+    await User.findByIdAndUpdate(currentUserId, {
+      $set: { role: "admin" },
+    });
+
+    const response = await agent
+      .patch(`/api/items/admin/review/${itemId}/approve`)
+      .send({});
+
+    assert.equal(response.status, 403);
 
     const savedItem = await Item.findById(itemId);
     assert.equal(savedItem.moderationStatus, "pending");
