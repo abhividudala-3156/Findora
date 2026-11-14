@@ -363,5 +363,14 @@ describe("Findora Authentication API", () => {
 
     assert.equal(meResponse.status, 401);
     assert.equal(meResponse.body.success, false);
+    const protectedResponse = await agent.get("/api/items/my-reports");
+
+    assert.equal(protectedResponse.status, 401);
+    assert.equal(protectedResponse.body.success, false);
+
+    const adminResponse = await agent.get("/api/items/admin/review");
+
+    assert.equal(adminResponse.status, 401);
+    assert.equal(adminResponse.body.success, false);
   });
 });
