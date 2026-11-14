@@ -1563,4 +1563,87 @@ it("prevents a claimant from confirming recovery twice", async () => {
     assert.equal(response.body.success, true);
     assert.ok(Array.isArray(response.body.data));
   });
+
+    // ADMIN MODERATION ACTIONS
+
+  it("allows an administrator to approve a pending report", async () => {
+    const itemResponse = await agent
+      .post("/api/items")
+      .set("x-csrf-token", csrfToken)
+      .send(createValidItem());
+
+    assert.equal(itemResponse.status, 201);
+
+    const itemId = itemResponse.body.data._id;
+
+    await User.findByIdAndUpdate(currentUserId, {
+      $set: { role: "admin" },
+    });
+
+    const response = await agent
+      .patch(`/api/items/admin/review/${itemId}/approve`)
+      .set("x-csrf-token", csrfToken)
+      .send({});
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.data.moderationStatus, "approved");
+
+    const savedItem = await Item.findById(itemId);
+    assert.equal(savedItem.moderationStatus, "approved");
+  });
+
+  it("allows an administrator to reject a pending report with a reason", async () => {
+    const itemResponse = await agent
+      .post("/api/items")
+      .set("x-csrf-token", csrfToken)
+      .send(createValidItem());
+
+    assert.equal(itemResponse.status, 201);
+
+    const itemId = itemResponse.body.data._id;
+
+    await User.findByIdAndUpdate(currentUserId, {
+      $set: { role: "admin" },
+    });
+
+    const response = await agent
+      .patch(`/api/items/admin/review/${itemId}/reject`)
+      .set("x-csrf-token", csrfToken)
+      .send({ reason: "Insufficient report details" });
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.data.moderationStatus, "rejected");
+    assert.equal(
+      response.body.data.moderationReason,
+      "Insufficient report details"
+    );
+
+    const savedItem = await Item.findById(itemId);
+    assert.equal(savedItem.moderationStatus, "rejected");
+  });
+
+  it("rejects an admin report rejection without a reason", async () => {
+    const itemResponse = await agent
+      .post("/api/items")
+      .set("x-csrf-token", csrfToken)
+      .send(createValidItem());
+
+    assert.equal(itemResponse.status, 201);
+
+    const itemId = itemResponse.body.data._id;
+
+    await User.findByIdAndUpdate(currentUserId, {
+      $set: { role: "admin" },
+    });
+
+    const response = await agent
+      .patch(`/api/items/admin/review/${itemId}/reject`)
+      .set("x-csrf-token", csrfToken)
+      .send({});
+
+    assert.equal(response.status, 400);
+
+    const savedItem = await Item.findById(itemId);
+    assert.equal(savedItem.moderationStatus, "pending");
+  });
 });
