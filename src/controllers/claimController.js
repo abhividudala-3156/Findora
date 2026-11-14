@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import Claim from "../models/Claim.js";
 import Item from "../models/Item.js";
 import Notification from "../models/Notification.js";
+import { createAuditLog } from "../services/auditLogService.js";
 
 // Submit a claim for an item.
 export async function createClaim(req, res) {
@@ -93,6 +94,22 @@ if (item.moderationStatus !== "approved") {
       itemOwner: item.owner,
       message,
     });
+
+    // Record claim submission in the audit log.
+try {
+  await createAuditLog({
+    actor: claimantId,
+    action: "claim_submitted",
+    entityType: "claim",
+    entityId: claim._id,
+    details: {
+      itemId: item._id,
+      itemTitle: item.title,
+    },
+  });
+} catch (auditError) {
+  console.error("Audit log creation failed:", auditError.message);
+}
 
     // Notification failure must not undo a successful claim.
     if (item.owner) {
@@ -313,6 +330,26 @@ if (item.moderationStatus !== "approved") {
       });
     }
 
+    // Record claim approval or rejection in the audit log.
+try {
+  await createAuditLog({
+    actor: req.user._id,
+    action:
+      nextStatus === "approved"
+        ? "claim_approved"
+        : "claim_rejected",
+    entityType: "claim",
+    entityId: updatedClaim._id,
+    details: {
+      itemId: item._id,
+      itemTitle: item.title,
+      newStatus: nextStatus,
+    },
+  });
+} catch (auditError) {
+  console.error("Audit log creation failed:", auditError.message);
+}
+
     // Reserve the item when a claim is approved.
     if (nextStatus === "approved") {
       const updatedItem = await Item.findOneAndUpdate(
@@ -391,6 +428,7 @@ export async function approveClaim(req, res) {
 export async function rejectClaim(req, res) {
   return reviewClaim(req, res, "rejected");
 }
+
 
 // Confirm that an approved item has been returned.
 export async function confirmRecovery(req, res) {
@@ -526,6 +564,25 @@ export async function confirmRecovery(req, res) {
     const recoveryComplete =
       claim.returnConfirmedByClaimant &&
       claim.returnConfirmedByOwner;
+
+    // Record each party's first recovery confirmation.
+    if (!alreadyConfirmed) {
+      try {
+        await createAuditLog({
+          actor: req.user._id,
+          action: "recovery_confirmed",
+          entityType: "claim",
+          entityId: claim._id,
+          details: {
+            itemId: item._id,
+            itemTitle: item.title,
+            confirmedBy: isClaimant ? "claimant" : "owner",
+          },
+        });
+      } catch (auditError) {
+        console.error("Audit log creation failed:", auditError.message);
+      }
+    }
 
     if (recoveryComplete) {
       const updatedItem = await Item.findOneAndUpdate(

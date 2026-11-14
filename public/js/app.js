@@ -77,6 +77,21 @@ const adminReviewMessage = document.getElementById(
   "admin-review-message"
 );
 
+// My Reports elements
+const myReportsNav = document.getElementById("my-reports-nav");
+const myReportsSection = document.getElementById("my-reports");
+const myReportsList = document.getElementById("my-reports-list");
+const myReportsMessage = document.getElementById("my-reports-message");
+const refreshMyReportsButton = document.getElementById("refresh-my-reports");
+
+// Audit Logs elements
+const auditLogsNav = document.getElementById("audit-logs-nav");
+const auditLogsSection = document.getElementById("audit-logs");
+const auditLogsList = document.getElementById("audit-logs-list");
+const auditLogsMessage = document.getElementById("audit-logs-message");
+const auditLogsPagination = document.getElementById("audit-logs-pagination");
+const refreshAuditLogsButton = document.getElementById("refresh-audit-logs");
+
 // ==========================================
 // 2. APPLICATION STATE
 // ==========================================
@@ -299,14 +314,34 @@ function updateMyClaimsVisibility() {
 }
 
 function updateAdminReviewVisibility() {
+  const isLoggedIn = Boolean(currentUser);
   const isAdmin = currentUser?.role === "admin";
 
+  // My Reports: available to logged-in users.
+  if (myReportsNav) {
+    myReportsNav.hidden = !isLoggedIn;
+  }
+
+  if (myReportsSection) {
+    myReportsSection.hidden = !isLoggedIn;
+  }
+
+  // Admin Review: administrators only.
   if (adminReviewNav) {
     adminReviewNav.hidden = !isAdmin;
   }
 
   if (adminReviewSection) {
     adminReviewSection.hidden = !isAdmin;
+  }
+
+  // Audit Logs: administrators only.
+  if (auditLogsNav) {
+    auditLogsNav.hidden = !isAdmin;
+  }
+
+  if (auditLogsSection) {
+    auditLogsSection.hidden = !isAdmin;
   }
 }
 
@@ -345,6 +380,7 @@ async function loadPendingReports() {
     console.error("Failed to load pending reports:", error);
   }
 }
+
 
 
 
@@ -419,6 +455,102 @@ function displayPendingReports(reports) {
       owner
     );
 
+    // Duplicate detection information.
+    const duplicateCheck = item.duplicateCheck || {};
+
+    const duplicateHeading = createTextElement(
+      "h4",
+      "",
+      "Duplicate Detection"
+    );
+
+    const duplicateStatus = createTextElement(
+      "p",
+      "",
+      `Status: ${duplicateCheck.status || "Not checked"}`
+    );
+
+    card.append(duplicateHeading, duplicateStatus);
+
+    // Display possible duplicates and lost/found matches.
+    if (duplicateCheck.matches?.length > 0) {
+      duplicateCheck.matches.forEach((match) => {
+        const matchType = match.matchType === "lost_found_match"
+          ? "Lost/Found Match"
+          : "Possible Duplicate";
+
+        const matchInfo = createTextElement(
+          "p",
+          "",
+          `${matchType} - Score: ${match.score}/100`
+        );
+
+        const reasons = createTextElement(
+          "p",
+          "",
+          `Reasons: ${match.reasons?.join(", ") || "No reasons provided"}`
+        );
+
+        card.append(matchInfo, reasons);
+      });
+    } else {
+      card.append(
+        createTextElement(
+          "p",
+          "",
+          "No similar reports found."
+        )
+      );
+    }
+
+    // Suspicious report detection information.
+    const suspiciousCheck = item.suspiciousCheck || {};
+
+    const suspiciousHeading = createTextElement(
+      "h4",
+      "",
+      "Suspicious Report Detection"
+    );
+
+    const suspiciousStatus = createTextElement(
+      "p",
+      "",
+      `Status: ${suspiciousCheck.status || "Not checked"}`
+    );
+
+    const riskScore = createTextElement(
+      "p",
+      "",
+      `Risk Score: ${suspiciousCheck.riskScore ?? 0}/100`
+    );
+
+    card.append(
+      suspiciousHeading,
+      suspiciousStatus,
+      riskScore
+    );
+
+    // Display suspicious report warnings.
+    if (suspiciousCheck.flags?.length > 0) {
+      suspiciousCheck.flags.forEach((flag) => {
+        card.append(
+          createTextElement(
+            "p",
+            "",
+            `Warning: ${flag}`
+          )
+        );
+      });
+    } else {
+      card.append(
+        createTextElement(
+          "p",
+          "",
+          "No suspicious activity detected."
+        )
+      );
+    }
+
     const actions = document.createElement("div");
     actions.className = "claim-actions";
 
@@ -438,7 +570,7 @@ function displayPendingReports(reports) {
 
     rejectButton.type = "button";
 
-    // Approve report
+    // Approve report.
     approveButton.addEventListener("click", async () => {
       if (!window.confirm("Approve this report?")) {
         return;
@@ -474,7 +606,7 @@ function displayPendingReports(reports) {
       }
     });
 
-    // Reject report
+    // Reject report.
     rejectButton.addEventListener("click", () => {
       const reasonForm = document.createElement("div");
       reasonForm.className = "rejection-form";
@@ -571,6 +703,7 @@ function displayPendingReports(reports) {
     adminReviewList.append(card);
   });
 }
+
 
 
 
@@ -1378,6 +1511,215 @@ async function loadMyClaims() {
 }
 
 
+// Load reports submitted by the logged-in user.
+async function loadMyReports() {
+  if (!currentUser || !myReportsList) {
+    return;
+  }
+
+  myReportsList.textContent = "Loading your reports...";
+
+  try {
+    const response = await fetch("/api/items/my-reports", {
+      method: "GET",
+      credentials: "same-origin",
+      headers: {
+        Accept: "application/json",
+      },
+    });
+
+    const result = await readJsonResponse(response);
+
+    myReportsList.textContent = "";
+
+    if (!result.data || result.data.length === 0) {
+      myReportsList.append(
+        createTextElement("p", "", "You have not submitted any reports yet.")
+      );
+      return;
+    }
+
+    result.data.forEach((item) => {
+      const card = document.createElement("div");
+      card.className = "claim-review-card";
+
+      // Display basic report information.
+      card.append(
+        createTextElement("h3", "", item.title),
+        createTextElement("p", "", `Type: ${item.type}`),
+        createTextElement("p", "", `Category: ${item.category}`),
+        createTextElement("p", "", `Location: ${item.campusLocation}`),
+        createTextElement("p", "", `Item status: ${item.status}`),
+        createTextElement(
+          "p",
+          "claim-status",
+          `Review status: ${item.moderationStatus}`
+        )
+      );
+
+      // Display rejection reason.
+      if (item.moderationStatus === "rejected") {
+        card.append(
+          createTextElement(
+            "p",
+            "form-message error",
+            `Reason: ${item.moderationReason || "No reason provided"}`
+          )
+        );
+      }
+
+      // Display duplicate detection information.
+      if (item.duplicateCheck?.status === "flagged") {
+        card.append(
+          createTextElement(
+            "p",
+            "form-message error",
+            "Possible duplicate report detected. Admin review is required."
+          )
+        );
+      }
+
+      // Display suspicious-report information.
+      if (item.suspiciousCheck?.status === "flagged") {
+        card.append(
+          createTextElement(
+            "p",
+            "form-message error",
+            "Similar reports were previously submitted from your account."
+          )
+        );
+      }
+
+      myReportsList.append(card);
+    });
+  } catch (error) {
+    myReportsList.textContent = "";
+
+    myReportsList.append(
+      createTextElement(
+        "p",
+        "form-message error",
+        error.message || "Unable to load your reports."
+      )
+    );
+
+    console.error("Load my reports error:", error);
+  }
+}
+
+
+// Load audit logs for administrators.
+async function loadAuditLogs(page = 1) {
+  if (!currentUser || currentUser.role !== "admin" || !auditLogsList) {
+    return;
+  }
+
+  auditLogsList.textContent = "Loading audit logs...";
+
+  try {
+    const response = await fetch(
+      `/api/items/admin/audit-logs?page=${page}&limit=20`,
+      {
+        method: "GET",
+        credentials: "same-origin",
+        headers: {
+          Accept: "application/json",
+        },
+      }
+    );
+
+    const result = await readJsonResponse(response);
+
+    auditLogsList.textContent = "";
+    auditLogsPagination.textContent = "";
+
+    if (!result.data || result.data.length === 0) {
+      auditLogsList.append(
+        createTextElement("p", "", "No audit logs available.")
+      );
+      return;
+    }
+
+    result.data.forEach((log) => {
+      const card = document.createElement("div");
+      card.className = "claim-review-card";
+
+      const actorName = log.actor?.name || "Unknown user";
+      const date = new Date(log.createdAt).toLocaleString();
+
+      card.append(
+        createTextElement("h3", "", log.action.replaceAll("_", " ")),
+        createTextElement("p", "", `Performed by: ${actorName}`),
+        createTextElement("p", "", `Action: ${log.action}`),
+        createTextElement("p", "", `Entity type: ${log.entityType}`),
+        createTextElement("p", "", `Entity ID: ${log.entityId}`),
+        createTextElement("p", "", `Date: ${date}`)
+      );
+
+      if (log.details && Object.keys(log.details).length > 0) {
+        card.append(
+          createTextElement(
+            "p",
+            "",
+            `Details: ${JSON.stringify(log.details)}`
+          )
+        );
+      }
+
+      auditLogsList.append(card);
+    });
+
+    // Display pagination information.
+        // Display pagination information.
+auditLogsPagination.textContent =
+  `Page ${result.currentPage} of ${result.totalPages}`;
+
+// Previous page button.
+const previousButton = createTextElement(
+  "button",
+  "btn btn-secondary",
+  "Previous"
+);
+
+previousButton.type = "button";
+previousButton.disabled = result.currentPage <= 1;
+
+previousButton.addEventListener("click", () => {
+  loadAuditLogs(result.currentPage - 1);
+});
+
+// Next page button.
+const nextButton = createTextElement(
+  "button",
+  "btn btn-secondary",
+  "Next"
+);
+
+nextButton.type = "button";
+nextButton.disabled = result.currentPage >= result.totalPages;
+
+nextButton.addEventListener("click", () => {
+  loadAuditLogs(result.currentPage + 1);
+});
+
+auditLogsPagination.append(previousButton, nextButton);
+
+  } catch (error) {
+    auditLogsList.textContent = "";
+
+    auditLogsList.append(
+      createTextElement(
+        "p",
+        "form-message error",
+        error.message || "Unable to load audit logs."
+      )
+    );
+
+    console.error("Load audit logs error:", error);
+  }
+}
+
+
 // Load claims submitted for an item.
 async function loadItemClaims(itemId, content) {
   try {
@@ -2063,6 +2405,15 @@ if (refreshMyClaimsButton) {
   });
 }
 
+// My Reports event listeners
+if (refreshMyReportsButton) {
+  refreshMyReportsButton.addEventListener("click", () => {
+    hideMessage(myReportsMessage);
+    loadMyReports();
+  });
+}
+
+// My Claims navigation
 if (myClaimsNav) {
   myClaimsNav.addEventListener("click", () => {
     hideMessage(myClaimsMessage);
@@ -2070,6 +2421,13 @@ if (myClaimsNav) {
   });
 }
 
+// My Reports navigation
+if (myReportsNav) {
+  myReportsNav.addEventListener("click", () => {
+    hideMessage(myReportsMessage);
+    loadMyReports();
+  });
+}
 if (notificationsNav) {
   notificationsNav.addEventListener("click", () => {
     loadNotifications();
@@ -2083,12 +2441,47 @@ if (refreshAdminReportsButton) {
   });
 }
 
+// My Reports event listeners
+if (refreshMyReportsButton) {
+  refreshMyReportsButton.addEventListener("click", () => {
+    loadMyReports();
+  });
+}
+
 if (adminReviewNav) {
   adminReviewNav.addEventListener("click", () => {
     loadPendingReports();
   });
 }
 
+// Admin Review navigation
+if (adminReviewNav) {
+  adminReviewNav.addEventListener("click", () => {
+    loadPendingReports();
+  });
+}
+
+// Audit Logs navigation
+if (auditLogsNav) {
+  auditLogsNav.addEventListener("click", () => {
+    hideMessage(auditLogsMessage);
+    loadAuditLogs();
+  });
+}
+
+// Audit Logs refresh event listener
+if (refreshAuditLogsButton) {
+  refreshAuditLogsButton.addEventListener("click", () => {
+    hideMessage(auditLogsMessage);
+    loadAuditLogs();
+  });
+}
+// Admin Review event listeners
+if (refreshAdminReportsButton) {
+  refreshAdminReportsButton.addEventListener("click", () => {
+    loadPendingReports();
+  });
+}
 // ==========================================
 // 19. INITIALIZE THE PAGE
 // ==========================================

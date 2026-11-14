@@ -2,6 +2,7 @@
 import mongoose from "mongoose";
 import Item from "../models/Item.js";
 import Notification from "../models/Notification.js";
+import { createAuditLog } from "../services/auditLogService.js";
 
 // Get all reports waiting for admin review.
 export async function getPendingReports(req, res) {
@@ -58,6 +59,23 @@ export async function approveReport(req, res) {
     item.moderationReason = "";
 
     await item.save();
+
+    // Record the approval in the audit log.
+try {
+  await createAuditLog({
+    actor: req.user._id,
+    action: "report_approved",
+    entityType: "item",
+    entityId: item._id,
+    details: {
+      title: item.title,
+      previousStatus: "pending",
+      newStatus: "approved",
+    },
+  });
+} catch (auditError) {
+  console.error("Audit log creation failed:", auditError.message);
+}
 
     if (item.owner) {
       await Notification.create({
@@ -128,6 +146,24 @@ export async function rejectReport(req, res) {
     item.moderationReason = reason;
 
     await item.save();
+
+    // Record the rejection in the audit log.
+try {
+  await createAuditLog({
+    actor: req.user._id,
+    action: "report_rejected",
+    entityType: "item",
+    entityId: item._id,
+    details: {
+      title: item.title,
+      previousStatus: "pending",
+      newStatus: "rejected",
+      reason: reason,
+    },
+  });
+} catch (auditError) {
+  console.error("Audit log creation failed:", auditError.message);
+}
 
     if (item.owner) {
       await Notification.create({

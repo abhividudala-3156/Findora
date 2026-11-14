@@ -4,6 +4,7 @@ import { Router } from "express";
 import {
   createItem,
   getItems,
+  getMyReports,
   getItemById,
   updateItem,
   deleteItem,
@@ -37,6 +38,8 @@ import {
   rejectReport,
 } from "../controllers/adminController.js";
 
+import { getAuditLogs } from "../controllers/auditLogController.js";
+
 const router = Router();
 
 // Public routes
@@ -44,6 +47,8 @@ router.get("/", getItems);
 
 // My Claims
 router.get("/my-claims", requireAuth, getMyClaims);
+
+router.get("/my-reports", requireAuth, getMyReports);
 
 // Admin review routes
 // These will be connected to the admin controller next.
@@ -69,6 +74,13 @@ router.patch(
   rejectReport
 );
 
+// Admin audit logs
+router.get(
+  "/admin/audit-logs",
+  requireAuth,
+  requireAdmin,
+  getAuditLogs
+);
 // Public item details
 router.get("/:id", getItemById);
 

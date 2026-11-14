@@ -649,6 +649,12 @@
 >
   Admin Review
 </a>
+<a class="nav-link" href="#my-reports" id="my-reports-nav" hidden>
+  My Reports
+</a>
+<a class="nav-link" href="#audit-logs" id="audit-logs-nav" hidden>
+  Audit Logs
+</a>
 
       <a class="nav-link" href="#notifications" id="notifications-nav" hidden>
         Notifications
@@ -890,6 +896,40 @@
   ></p>
 </section>
 
+
+<!-- My Reports Section -->
+<section id="my-reports" class="page-section" hidden>
+  <div class="section-header">
+    <h2>My Reports</h2>
+    <button id="refresh-my-reports" class="btn btn-secondary">
+      Refresh
+    </button>
+  </div>
+
+  <div id="my-reports-message" class="message" hidden></div>
+
+  <div id="my-reports-list" class="items-grid">
+    <!-- User reports will be displayed here -->
+  </div>
+</section>
+
+<!-- Audit Logs Section -->
+<section id="audit-logs" class="page-section" hidden>
+  <div class="section-header">
+    <h2>Audit Logs</h2>
+    <button id="refresh-audit-logs" class="btn btn-secondary">
+      Refresh
+    </button>
+  </div>
+
+  <div id="audit-logs-message" class="message" hidden></div>
+
+  <div id="audit-logs-list" class="items-grid">
+    <!-- Audit log records will be displayed here -->
+  </div>
+
+  <div id="audit-logs-pagination"></div>
+</section>
 
     <!-- Notifications Section -->
     <section

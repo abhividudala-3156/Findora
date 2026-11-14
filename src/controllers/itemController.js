@@ -2,9 +2,11 @@
 
 import mongoose from "mongoose";
 import Item from "../models/Item.js";
+import { detectReportPatterns } from "../services/reportDetectionService.js";
 import path from "node:path";
 import { removeUploadedFile } from "../middleware/imageUpload.js";
 import { readFile } from "node:fs/promises";
+import { createAuditLog } from "../services/auditLogService.js";
 import {
   uploadImageToCloudinary,
   deleteCloudinaryImage,
@@ -94,12 +96,59 @@ export async function createItem(req, res) {
     // The owner is always assigned from the authenticated session.
     itemData.owner = userId;
 
-    const item = await Item.create(itemData);
+    // Validate the report before running detection.
+    const newItem = new Item(itemData);
+    await newItem.validate();
+
+    // Run duplicate and suspicious-report detection.
+    let detectionResults = {
+      duplicateCheck: {
+        status: "not_checked",
+        checkedAt: null,
+        matches: [],
+      },
+      suspiciousCheck: {
+        status: "not_checked",
+        checkedAt: null,
+        flags: [],
+        riskScore: 0,
+      },
+    };
+
+    try {
+      detectionResults = await detectReportPatterns(itemData);
+    } catch (detectionError) {
+      // Detection failure should not prevent report submission.
+      console.error(
+        "Report detection failed:",
+        detectionError.message
+      );
+    }
+
+    // Save the report with its detection results.
+    newItem.set(detectionResults);
+    await newItem.save();
+
+    // Record item creation in the audit log.
+try {
+  await createAuditLog({
+    actor: userId,
+    action: "item_created",
+    entityType: "item",
+    entityId: newItem._id,
+    details: {
+      title: newItem.title,
+      type: newItem.type,
+    },
+  });
+} catch (auditError) {
+  console.error("Audit log creation failed:", auditError.message);
+}
 
     return res.status(201).json({
       success: true,
       message: "Item created successfully",
-      data: item,
+      data: newItem,
     });
   } catch (error) {
     return handleError(error, res);
@@ -259,6 +308,25 @@ const filter = {
   }
 }
 
+// Get reports submitted by the logged-in user.
+export async function getMyReports(req, res) {
+  try {
+    const reports = await Item.find({
+      owner: req.user._id,
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return res.status(200).json({
+      success: true,
+      count: reports.length,
+      data: reports,
+    });
+  } catch (error) {
+    return handleError(error, res);
+  }
+}
+
 export async function getItemById(req, res) {
   try {
     if (!mongoose.isValidObjectId(req.params.id)) {
@@ -385,6 +453,7 @@ export async function getItemImage(req, res, next) {
 }
 
 
+
 // Update an item's details. Ownership cannot be changed by the request.
 export async function updateItem(req, res) {
   try {
@@ -420,24 +489,73 @@ export async function updateItem(req, res) {
       });
     }
 
-   // Only active reports can be edited.
-if (item.status !== "active") {
-  return res.status(409).json({
-    success: false,
-    message: "Only active reports can be updated",
+    // Only active reports can be edited.
+    if (item.status !== "active") {
+      return res.status(409).json({
+        success: false,
+        message: "Only active reports can be updated",
+      });
+    }
+
+    // Apply the updated details.
+    item.set(updates);
+
+    // Send edited reports back for admin review.
+    item.moderationStatus = "pending";
+    item.reviewedBy = null;
+    item.reviewedAt = null;
+    item.moderationReason = "";
+
+    // Reset detection results before checking again.
+    item.duplicateCheck = {
+      status: "not_checked",
+      checkedAt: null,
+      matches: [],
+    };
+
+    item.suspiciousCheck = {
+      status: "not_checked",
+      checkedAt: null,
+      flags: [],
+      riskScore: 0,
+    };
+
+    // Validate the updated report.
+    await item.validate();
+
+    // Run detection while excluding this report itself.
+    try {
+      const detectionResults = await detectReportPatterns(
+        item.toObject(),
+        item._id
+      );
+
+      item.set(detectionResults);
+    } catch (detectionError) {
+      // Detection failure should not prevent report updates.
+      console.error(
+        "Report detection failed:",
+        detectionError.message
+      );
+    }
+
+    await item.save();
+
+    // Record item update in the audit log.
+try {
+  await createAuditLog({
+    actor: req.user._id,
+    action: "item_updated",
+    entityType: "item",
+    entityId: item._id,
+    details: {
+      title: item.title,
+      moderationStatus: "pending",
+    },
   });
+} catch (auditError) {
+  console.error("Audit log creation failed:", auditError.message);
 }
-
-// Owner is intentionally excluded from UPDATE_FIELDS.
-item.set(updates);
-
-// Send edited reports back for admin review.
-item.moderationStatus = "pending";
-item.reviewedBy = null;
-item.reviewedAt = null;
-item.moderationReason = "";
-
-await item.save();
 
     return res.status(200).json({
       success: true,
@@ -448,6 +566,7 @@ await item.save();
     return handleError(error, res);
   }
 }
+
 
 
 export async function uploadItemImage(req, res, next) {
@@ -573,6 +692,23 @@ export async function deleteItem(req, res) {
 
     // Delete the database record first.
     await item.deleteOne();
+
+    const deletedItemTitle = item.title;
+
+    // Record item deletion in the audit log.
+try {
+  await createAuditLog({
+    actor: req.user._id,
+    action: "item_deleted",
+    entityType: "item",
+    entityId: item._id,
+    details: {
+      title: deletedItemTitle,
+    },
+  });
+} catch (auditError) {
+  console.error("Audit log creation failed:", auditError.message);
+}
 
     // Cloudinary cleanup must not undo a successful item deletion.
     if (imagePublicId) {

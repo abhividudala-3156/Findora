@@ -720,7 +720,7 @@ textarea:focus-visible {
   }
 }
 
-/* Authentication section */
+/* 13. Authentication section */
 .auth-section {
   padding: 40px 20px;
 }
@@ -810,6 +810,7 @@ textarea:focus-visible {
   outline: 3px solid #93c5fd;
   outline-offset: 3px;
 }
+
 .header-actions {
   display: flex;
   align-items: center;
@@ -817,6 +818,7 @@ textarea:focus-visible {
   flex-wrap: wrap;
   gap: 10px;
 }
+
 #user-panel {
   display: flex;
   align-items: center;
@@ -863,7 +865,7 @@ textarea:focus-visible {
   }
 }
 
-/* Claim form */
+/* 14. Claim form */
 .claim-button,
 .claim-submit-button,
 .claim-cancel-button {
@@ -910,7 +912,8 @@ textarea:focus-visible {
   opacity: 0.6;
   cursor: not-allowed;
 }
-/* Notifications */
+
+/* 15. Notifications */
 .notification-list {
   display: grid;
   gap: 15px;
@@ -954,8 +957,7 @@ textarea:focus-visible {
   margin-top: 8px;
 }
 
-
-/* Admin Report Rejection Form */
+/* 16. Admin Report Rejection Form */
 .rejection-form {
   display: flex;
   flex-direction: column;
@@ -997,4 +999,205 @@ textarea:focus-visible {
 .rejection-form button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/* 17. My Reports and Audit Logs */
+
+/* Common section layout */
+.page-section {
+  padding: 48px 7%;
+}
+
+.page-section[hidden] {
+  display: none !important;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.section-header h2 {
+  font-size: clamp(26px, 4vw, 34px);
+  line-height: 1.3;
+}
+
+/* Refresh buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 10px 16px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: white;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* My Reports and Audit Logs grids */
+#my-reports-list,
+#audit-logs-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+/* Report and audit cards */
+.claim-review-card {
+  min-width: 0;
+  padding: 22px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: 0 5px 18px #17203308;
+  overflow-wrap: anywhere;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.claim-review-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 24px #1720330d;
+}
+
+.claim-review-card h3 {
+  margin-bottom: 14px;
+  font-size: 18px;
+  line-height: 1.4;
+  text-transform: capitalize;
+}
+
+.claim-review-card p {
+  margin-top: 9px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* Status information */
+.claim-review-card .claim-status {
+  display: inline-block;
+  margin-top: 12px;
+  padding: 5px 11px;
+  border-radius: 20px;
+  background: #eaf0ff;
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+/* Duplicate and suspicious warnings */
+.claim-review-card .form-message.error {
+  margin-top: 12px;
+  padding: 11px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+/* Audit Logs pagination */
+#audit-logs-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 28px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+#audit-logs-pagination button {
+  min-height: 40px;
+  padding: 9px 16px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: white;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+#audit-logs-pagination button:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+#audit-logs-pagination button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Empty and loading messages */
+#my-reports-list > p,
+#audit-logs-list > p {
+  grid-column: 1 / -1;
+  padding: 28px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  background: white;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* Tablet layout */
+@media (max-width: 900px) {
+  .page-section {
+    padding-right: 4%;
+    padding-left: 4%;
+  }
+
+  #my-reports-list,
+  #audit-logs-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Mobile layout */
+@media (max-width: 560px) {
+  .page-section {
+    padding: 36px 5%;
+  }
+
+  .section-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  #my-reports-list,
+  #audit-logs-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .claim-review-card {
+    padding: 18px;
+  }
+
+  #audit-logs-pagination {
+    gap: 9px;
+  }
+
+  #audit-logs-pagination button {
+    padding: 8px 12px;
+  }
 }

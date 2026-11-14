@@ -24,7 +24,7 @@ const itemSchema = new mongoose.Schema(
       required: [true, "Item type is required"],
       enum: {
         values: ["lost", "found"],
-        message: "Type must be either lost or found"
+        message: "Type must be lost or found"
       }
     },
 
@@ -95,7 +95,7 @@ const itemSchema = new mongoose.Schema(
       maxlength: [254, "Contact email cannot exceed 254 characters"],
       match: [
         /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
-        "Please provide a valid email address"
+        "Please provide a valid contact email"
       ]
     },
 
@@ -116,7 +116,7 @@ const itemSchema = new mongoose.Schema(
       default: "active"
     },
 
-    // Admin moderation status
+    // Existing admin moderation fields
     moderationStatus: {
       type: String,
       enum: ["pending", "approved", "rejected"],
@@ -124,25 +124,87 @@ const itemSchema = new mongoose.Schema(
       index: true
     },
 
-    // Admin who reviewed the report
     reviewedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       default: null
     },
 
-    // Date and time of moderation
     reviewedAt: {
       type: Date,
       default: null
     },
 
-    // Reason provided by admin
     moderationReason: {
       type: String,
       trim: true,
       maxlength: [500, "Moderation reason cannot exceed 500 characters"],
       default: ""
+    },
+
+    // Duplicate detection results
+    duplicateCheck: {
+      status: {
+        type: String,
+        enum: ["not_checked", "clear", "flagged"],
+        default: "not_checked"
+      },
+
+      checkedAt: {
+        type: Date,
+        default: null
+      },
+
+      matches: [
+        {
+          matchedItem: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Item"
+          },
+
+          matchType: {
+            type: String,
+            enum: ["same_type_duplicate", "lost_found_match"]
+          },
+
+          score: {
+            type: Number,
+            min: 0,
+            max: 100
+          },
+
+          reasons: {
+            type: [String],
+            default: []
+          }
+        }
+      ]
+    },
+
+    // Suspicious-report detection results
+    suspiciousCheck: {
+      status: {
+        type: String,
+        enum: ["not_checked", "clear", "flagged"],
+        default: "not_checked"
+      },
+
+      checkedAt: {
+        type: Date,
+        default: null
+      },
+
+      flags: {
+        type: [String],
+        default: []
+      },
+
+      riskScore: {
+        type: Number,
+        min: 0,
+        max: 100,
+        default: 0
+      }
     }
   },
 
@@ -152,8 +214,20 @@ const itemSchema = new mongoose.Schema(
   }
 );
 
+// Existing indexes
 itemSchema.index({ type: 1, status: 1, createdAt: -1 });
 itemSchema.index({ category: 1, campusLocation: 1 });
+
+// Detection and admin review indexes
+itemSchema.index({
+  "duplicateCheck.status": 1,
+  moderationStatus: 1
+});
+
+itemSchema.index({
+  "suspiciousCheck.status": 1,
+  moderationStatus: 1
+});
 
 const Item = mongoose.model("Item", itemSchema);
 
