@@ -1509,5 +1509,58 @@ it("prevents a claimant from confirming recovery twice", async () => {
     assert.equal(savedNotification.isRead, false);
   });
 
+    // ADMIN AUTHORIZATION AND AUDIT LOG SECURITY
 
+  it("rejects access to the admin review queue without authentication", async () => {
+    const anonymous = await createAnonymousAgent();
+
+    const response = await anonymous.agent.get(
+      "/api/items/admin/review"
+    );
+
+    assert.equal(response.status, 401);
+    assert.equal(response.body.success, false);
+  });
+
+  it("prevents a normal user from accessing the admin review queue", async () => {
+    const response = await agent.get("/api/items/admin/review");
+
+    assert.equal(response.status, 403);
+    assert.equal(response.body.success, false);
+  });
+
+  it("allows an administrator to access the admin review queue", async () => {
+    await User.findByIdAndUpdate(currentUserId, {
+      $set: { role: "admin" },
+    });
+
+    const response = await agent.get("/api/items/admin/review");
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.success, true);
+    assert.ok(Array.isArray(response.body.data));
+  });
+
+  it("prevents a normal user from accessing audit logs", async () => {
+    const response = await agent.get(
+      "/api/items/admin/audit-logs"
+    );
+
+    assert.equal(response.status, 403);
+    assert.equal(response.body.success, false);
+  });
+
+  it("allows an administrator to access audit logs", async () => {
+    await User.findByIdAndUpdate(currentUserId, {
+      $set: { role: "admin" },
+    });
+
+    const response = await agent.get(
+      "/api/items/admin/audit-logs"
+    );
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.success, true);
+    assert.ok(Array.isArray(response.body.data));
+  });
 });
