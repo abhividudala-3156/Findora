@@ -149,7 +149,13 @@ async function createItem(overrides = {}) {
     `Item creation failed: ${JSON.stringify(response.body)}`
   );
 
-  return response.body.data;
+  const approvedItem = await Item.findByIdAndUpdate(
+    response.body.data._id,
+    { $set: { moderationStatus: "approved" } },
+    { returnDocument: "after" }
+  );
+
+  return approvedItem.toObject();
 }
 
 // Create an anonymous session with a valid CSRF token.
@@ -387,7 +393,10 @@ describe("Findora API", () => {
 
     assert.equal(response.status, 200);
     assert.equal(response.body.success, true);
-    assert.equal(response.body.data._id, item._id);
+    assert.equal(
+  response.body.data._id.toString(),
+  item._id.toString()
+);
     assert.equal(response.body.data.title, item.title);
   });
 
@@ -403,7 +412,7 @@ describe("Findora API", () => {
 
     assert.ok(
       response.body.data.some(
-        (result) => result._id === item._id
+        (result) => result._id.toString() === item._id.toString()
       )
     );
   });
@@ -706,6 +715,9 @@ describe("Findora API", () => {
     );
 
     const savedItem = await Item.findById(item._id);
+
+    savedItem.moderationStatus = "approved";
+await savedItem.save();
 
     assert.equal(savedItem.imageUrl, expectedImageUrl);
     assert.equal(savedItem.imagePublicId, "findora/items/test-image");
@@ -1358,6 +1370,10 @@ it("prevents a claimant from confirming recovery twice", async () => {
 
     assert.equal(itemResponse.status, 201);
     const item = itemResponse.body.data;
+    await Item.findByIdAndUpdate(
+  item._id,
+  { $set: { moderationStatus: "approved" } }
+);
 
     const claimResponse = await claimant.agent
       .post(`/api/items/${item._id}/claims`)
@@ -1402,6 +1418,11 @@ it("prevents a claimant from confirming recovery twice", async () => {
 
     assert.equal(itemResponse.status, 201);
     const item = itemResponse.body.data;
+
+    await Item.findByIdAndUpdate(
+  item._id,
+  { $set: { moderationStatus: "approved" } }
+);
 
     const claimResponse = await claimant.agent
       .post(`/api/items/${item._id}/claims`)
@@ -1451,6 +1472,11 @@ it("prevents a claimant from confirming recovery twice", async () => {
 
     assert.equal(itemResponse.status, 201);
     const item = itemResponse.body.data;
+
+    await Item.findByIdAndUpdate(
+  item._id,
+  { $set: { moderationStatus: "approved" } }
+);
 
     const claimResponse = await claimant.agent
       .post(`/api/items/${item._id}/claims`)
