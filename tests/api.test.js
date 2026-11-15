@@ -5,6 +5,7 @@ import {
   before,
   beforeEach,
   after,
+  mock,
 } from "node:test";
 
 import assert from "node:assert/strict";
@@ -803,6 +804,69 @@ await savedItem.save();
     resetCloudinaryOperationsForTesting();
   }
 });
+  it("should delete the Cloudinary image when MongoDB save fails", async () => {
+    const item = await createItem();
+    const imageBuffer = await createTestImage();
+    const destroyedPublicIds = [];
+
+    const originalSave = Item.prototype.save;
+
+    setCloudinaryOperationsForTesting({
+      upload: async () => ({
+        secure_url:
+          "https://res.cloudinary.com/findora-test/image/upload/v123/findora/items/save-failure.jpg",
+        public_id: "findora/items/save-failure",
+      }),
+
+      destroy: async (publicId) => {
+        destroyedPublicIds.push(publicId);
+        return { result: "ok" };
+      },
+    });
+
+    const saveMock = mock.method(
+      Item.prototype,
+      "save",
+      async function (...args) {
+        if (this._id.toString() === item._id.toString()) {
+          throw new Error("Simulated MongoDB save failure");
+        }
+
+        return originalSave.apply(this, args);
+      }
+    );
+
+    try {
+      const response = await agent
+        .post(`/api/items/${item._id}/image`)
+        .set("x-csrf-token", csrfToken)
+        .attach("image", imageBuffer, {
+          filename: "test-image.jpg",
+          contentType: "image/jpeg",
+        });
+
+      assert.equal(response.status, 500);
+      assert.equal(response.body.success, false);
+
+      assert.deepEqual(destroyedPublicIds, [
+        "findora/items/save-failure",
+      ]);
+
+      const temporaryFiles = await readdir(
+        path.resolve("tmp", "uploads")
+      );
+
+      assert.equal(
+        temporaryFiles.some((filename) =>
+          filename.startsWith("processed-")
+        ),
+        false
+      );
+    } finally {
+      saveMock.mock.restore();
+      resetCloudinaryOperationsForTesting();
+    }
+  });
 
   it("should reject image uploads without authentication", async () => {
     const item = await createItem();
