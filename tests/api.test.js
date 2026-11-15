@@ -1011,7 +1011,93 @@ await savedItem.save();
 
   assert.equal(pendingClaims, 1);
 });
+  it("allows only the item owner to view claims", async () => {
+    const item = await createItem();
 
+    const claimant = await createLoggedInAgent(
+      "privacy-claimant@example.com"
+    );
+
+    const message =
+      "I can identify this item by its unique marks and details.";
+
+    const claimResponse = await claimant.agent
+      .post(`/api/items/${item._id}/claims`)
+      .set("x-csrf-token", claimant.csrfToken)
+      .send({ message });
+
+    assert.equal(claimResponse.status, 201);
+
+    // The item owner should be able to view the claim.
+    const ownerResponse = await agent
+      .get(`/api/items/${item._id}/claims`);
+
+    assert.equal(ownerResponse.status, 200);
+    assert.equal(ownerResponse.body.count, 1);
+    assert.equal(ownerResponse.body.data.length, 1);
+
+    // Another authenticated user must not view the claim.
+    const anotherUser = await createLoggedInAgent(
+      "privacy-outsider@example.com"
+    );
+
+    const outsiderResponse = await anotherUser.agent
+      .get(`/api/items/${item._id}/claims`);
+
+    assert.equal(outsiderResponse.status, 403);
+    assert.equal(outsiderResponse.body.success, false);
+  });
+
+  it("returns only the logged-in claimant's own claims", async () => {
+    const firstItem = await createItem();
+    const secondItem = await createItem({
+      title: "Found student identity card",
+      type: "found",
+    });
+
+    const firstClaimant = await createLoggedInAgent(
+      "first-privacy-claimant@example.com"
+    );
+
+    const secondClaimant = await createLoggedInAgent(
+      "second-privacy-claimant@example.com"
+    );
+
+    const message =
+      "I can identify this item by its unique marks and details.";
+
+    const firstClaimResponse = await firstClaimant.agent
+      .post(`/api/items/${firstItem._id}/claims`)
+      .set("x-csrf-token", firstClaimant.csrfToken)
+      .send({ message });
+
+    assert.equal(firstClaimResponse.status, 201);
+
+    const secondClaimResponse = await secondClaimant.agent
+      .post(`/api/items/${secondItem._id}/claims`)
+      .set("x-csrf-token", secondClaimant.csrfToken)
+      .send({ message });
+
+    assert.equal(secondClaimResponse.status, 201);
+
+    // The first claimant should see only their own claim.
+    const myClaimsResponse = await firstClaimant.agent
+      .get("/api/items/my-claims");
+
+    assert.equal(myClaimsResponse.status, 200);
+    assert.equal(myClaimsResponse.body.count, 1);
+    assert.equal(myClaimsResponse.body.data.length, 1);
+
+    assert.equal(
+      myClaimsResponse.body.data[0].claimant.toString(),
+      firstClaimant.userId.toString()
+    );
+
+    assert.equal(
+      myClaimsResponse.body.data[0].item._id.toString(),
+      firstItem._id.toString()
+    );
+  });
 
   it("allows the item owner to approve a pending claim", async () => {
     const item = await createItem();
