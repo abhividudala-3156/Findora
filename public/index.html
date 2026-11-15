@@ -1,612 +1,3 @@
-<!-- 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Find lost belongings and report found items on campus.">
-  <title>Campus Lost & Found</title>
-  <link rel="stylesheet" href="/css/style.css">
-  <script src="/js/app.js" defer></script>
-</head>
-<body>
-  <header class="site-header">
-    <a class="brand" href="/" aria-label="Campus Lost and Found home">
-      <span class="brand-icon">C</span>
-      <span>Campus<span class="brand-accent">Find</span></span>
-    </a>
-
-    <nav aria-label="Main navigation">
-      <a class="nav-link active" href="/">Home</a>
-      <a class="nav-link" href="#listings">Browse Items</a>
-      <a class="nav-link" href="#report">Report an Item</a>
-    </nav>
-
-    <a class="header-button" href="#report">+ Report Item</a>
-  </header>
-
-  <main>
-    <section class="hero">
-      <p class="eyebrow">SAI UNIVERSITY · CAMPUS COMMUNITY</p>
-      <h1>Lost something?<br><span>Let's find it.</span></h1>
-      <p class="hero-description">
-        A missing belonging can turn up here. Browse reported items
-        or help someone reconnect with what they've lost.
-      </p>
-
-      <div class="hero-actions">
-        <a class="button button-primary" href="#listings">Browse Items</a>
-        <a class="button button-secondary" href="#report">Report an Item</a>
-      </div>
-
-      <div class="trust-note">
-        <span class="status-dot"></span>
-        Built for the Sai University campus community
-      </div>
-    </section>
-
-    <section class="listings section" id="listings">
-      <div class="section-heading">
-        <div>
-          <p class="eyebrow">COMMUNITY LISTINGS</p>
-          <h2>Recent items</h2>
-          <p class="muted">Browse lost and found belongings reported on campus.</p>
-        </div>
-        <span class="item-count" id="item-count">Loading items...</span>
-      </div>
-
-      <div class="search-panel">
-        <label class="search-box">
-          <span aria-hidden="true">⌕</span>
-          <input
-            type="search"
-            id="search-input"
-            placeholder="Search by item name or description..."
-            aria-label="Search items"
-          >
-        </label>
-
-        <select id="type-filter" aria-label="Filter by item type">
-          <option value="">All items</option>
-          <option value="lost">Lost items</option>
-          <option value="found">Found items</option>
-        </select>
-
-        <select id="category-filter" aria-label="Filter by category">
-          <option value="">All categories</option>
-          <option value="electronics">Electronics</option>
-          <option value="identification">Identification</option>
-          <option value="books">Books</option>
-          <option value="clothing">Clothing</option>
-          <option value="accessories">Accessories</option>
-          <option value="stationery">Stationery</option>
-          <option value="other">Other</option>
-        </select>
-      </div>
-      
-    <select id="sort-filter" aria-label="Sort items">
-    <option value="newest">Newest first</option>
-    <option value="oldest">Oldest first</option>
-    <option value="title">Title (A–Z)</option>
-    </select>
-
-
-      <div class="item-grid" id="item-grid" aria-live="polite">
-        <p class="loading-message">Connecting to campus listings...</p>
-      </div>
-
-      <p class="error-message" id="error-message" role="alert" hidden></p>
-    </section>
-    
-<section class="report-section section" id="report">
-  <div class="report-intro">
-    <p class="eyebrow">HELP THE COMMUNITY</p>
-    <h2>Lost something?<br>Found something?</h2>
-    <p class="muted">
-      Share the details below to help reunite lost belongings
-      with their owners.
-    </p>
-  </div>
-
-  <form id="report-form" class="report-form">
-    <h3>Report an item</h3>
-    <p class="form-description">Fields marked * are required.</p>
-
-    <div class="form-group">
-      <label for="item-title">Item name *</label>
-      <input
-        type="text"
-        id="item-title"
-        name="title"
-        placeholder="e.g. Black wireless headphones"
-        minlength="2"
-        maxlength="100"
-        required
-      >
-    </div>
-
-    <div class="form-group">
-      <label for="item-type">Report type *</label>
-      <select id="item-type" name="type" required>
-        <option value="">Select report type</option>
-        <option value="lost">I lost this item</option>
-        <option value="found">I found this item</option>
-      </select>
-    </div>
-
-    <div class="form-group">
-      <label for="item-category">Category *</label>
-      <select id="item-category" name="category" required>
-        <option value="">Select a category</option>
-        <option value="electronics">Electronics</option>
-        <option value="identification">Identification</option>
-        <option value="books">Books</option>
-        <option value="clothing">Clothing</option>
-        <option value="accessories">Accessories</option>
-        <option value="stationery">Stationery</option>
-        <option value="other">Other</option>
-      </select>
-    </div>
-
-    <div class="form-group">
-      <label for="item-description">Description *</label>
-      <textarea
-        id="item-description"
-        name="description"
-        rows="4"
-        minlength="10"
-        maxlength="2000"
-        placeholder="Describe the item and any identifying details..."
-        required
-      ></textarea>
-    </div>
-
-    <div class="form-group">
-      <label for="item-location">Campus location *</label>
-      <input
-        type="text"
-        id="item-location"
-        name="campusLocation"
-        maxlength="150"
-        placeholder="e.g. Library, second floor"
-        required
-      >
-    </div>
-
-    <div class="form-group">
-      <label for="item-date">Date lost or found *</label>
-      <input
-        type="date"
-        id="item-date"
-        name="dateOccurred"
-        required
-      >
-    </div>
-
-    <div class="form-group">
-      <label for="contact-name">Your name *</label>
-      <input
-        type="text"
-        id="contact-name"
-        name="contactName"
-        maxlength="100"
-        autocomplete="name"
-        placeholder="Enter your name"
-        required
-      >
-    </div>
-
-    <div class="form-group">
-      <label for="contact-email">Contact email *</label>
-      <input
-        type="email"
-        id="contact-email"
-        name="contactEmail"
-        maxlength="254"
-        autocomplete="email"
-        placeholder="you@example.com"
-        required
-      >
-    </div>
-
-    <div class="form-group">
-      <label for="item-image">Image URL (optional)</label>
-      <input
-        type="url"
-        id="item-image"
-        name="imageUrl"
-        maxlength="2048"
-        placeholder="https://example.com/image.jpg"
-      >
-    </div>
-
-    <button type="submit" class="button button-primary" id="submit-report">
-      Submit Report
-    </button>
-
-    <p id="form-message" class="form-message" role="status" aria-live="polite" hidden></p>
-  </form>
-</section>
-
-  </main>
-
-  <footer class="site-footer">
-    <a class="brand footer-brand" href="/">
-      <span class="brand-icon">C</span>
-      <span>Campus<span class="brand-accent">Find</span></span>
-    </a>
-    <p>Made for the Sai University campus community.</p>
-    <p>Campus Lost & Found · 2026–2027</p>
-  </footer>
-</body>
-</html> -->
-
-
-
-<!-- <!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta
-    name="description"
-    content="Find lost belongings and report found items at Sai University."
-  >
-  <title>Campus Lost &amp; Found | Sai University</title>
-  <link rel="stylesheet" href="/css/style.css">
-  <script src="/js/app.js" defer></script>
-</head>
-<body>
-  <header class="site-header">
-    <a class="brand" href="/" aria-label="CampusFind home">
-      <span class="brand-icon">C</span>
-      <span>Campus<span class="brand-accent">Find</span></span>
-    </a>
-
-    <nav aria-label="Main navigation">
-  <a class="nav-link active" href="/">Home</a>
-  <a class="nav-link" href="#listings">Browse Items</a>
-  <a class="nav-link" href="#report">Report an Item</a>
-
-  <a class="nav-link" href="#notifications" id="notifications-nav" hidden>
-    Notifications
-    <span id="notification-count" class="notification-count" hidden>0</span>
-  </a>
-    </nav>
-
-    <div class="header-actions">
-  <a class="header-button" href="#report">+ Report Item</a>
-  <button type="button" class="auth-button" id="open-auth">
-    Login / Register
-  </button>
-  <div id="user-panel" hidden>
-    <span id="current-user-name"></span>
-    <button type="button" class="auth-button" id="logout-button">
-      Logout
-    </button>
-  </div>
-</div>
-  </header>
-
-  <main>
-    <section class="auth-section section" id="auth-section" hidden>
-  <div class="auth-card">
-    <h2 id="auth-title">Welcome to Findora</h2>
-    <p class="muted" id="auth-description">
-      Sign in to report lost or found items.
-    </p>
-
-    <div class="auth-tabs">
-      <button type="button" id="login-tab" class="auth-tab active">
-        Login
-      </button>
-      <button type="button" id="register-tab" class="auth-tab">
-        Register
-      </button>
-    </div>
-
-    <form id="auth-form">
-      <div class="form-group" id="auth-name-group" hidden>
-        <label for="auth-name">Full name</label>
-        <input
-          type="text"
-          id="auth-name"
-          name="name"
-          minlength="2"
-          maxlength="80"
-          autocomplete="name"
-        >
-      </div>
-
-      <div class="form-group">
-        <label for="auth-email">Email address</label>
-        <input
-          type="email"
-          id="auth-email"
-          name="email"
-          maxlength="254"
-          autocomplete="email"
-          required
-        >
-      </div>
-
-      <div class="form-group">
-        <label for="auth-password">Password</label>
-        <input
-          type="password"
-          id="auth-password"
-          name="password"
-          minlength="8"
-          maxlength="72"
-          autocomplete="current-password"
-          required
-        >
-      </div>
-
-      <button type="submit" class="button button-primary" id="auth-submit">
-        Login
-      </button>
-
-      <p id="auth-message" class="form-message" role="status"
-         aria-live="polite" hidden></p>
-    </form>
-
-    <button type="button" class="auth-cancel" id="close-auth">
-      Cancel
-    </button>
-  </div>
-</section>
-    <section class="hero">
-      <p class="eyebrow">SAI UNIVERSITY · CAMPUS COMMUNITY</p>
-      <h1>Lost something?<br><span>Let's find it.</span></h1>
-      <p class="hero-description">
-        A missing belonging can turn up here. Browse reported items
-        or help someone reconnect with what they've lost.
-      </p>
-
-      <div class="hero-actions">
-        <a class="button button-primary" href="#listings">Browse Items</a>
-        <a class="button button-secondary" href="#report">Report an Item</a>
-      </div>
-
-      <div class="trust-note">
-        <span class="status-dot"></span>
-        Built for the Sai University campus community
-      </div>
-    </section>
-
-    <section class="listings section" id="listings">
-      <div class="section-heading">
-        <div>
-          <p class="eyebrow">COMMUNITY LISTINGS</p>
-          <h2>Recent items</h2>
-          <p class="muted">
-            Browse lost and found belongings reported on campus.
-          </p>
-        </div>
-        <span class="item-count" id="item-count" aria-live="polite">
-          Loading items...
-        </span>
-      </div>
-
-      <div class="search-panel">
-        <label class="search-box">
-          <span aria-hidden="true">⌕</span>
-          <input
-            type="search"
-            id="search-input"
-            placeholder="Search by item name or description..."
-            aria-label="Search items"
-          >
-        </label>
-
-        <select id="type-filter" aria-label="Filter by item type">
-          <option value="">All items</option>
-          <option value="lost">Lost items</option>
-          <option value="found">Found items</option>
-        </select>
-
-        <select id="category-filter" aria-label="Filter by category">
-          <option value="">All categories</option>
-          <option value="electronics">Electronics</option>
-          <option value="identification">Identification</option>
-          <option value="books">Books</option>
-          <option value="clothing">Clothing</option>
-          <option value="accessories">Accessories</option>
-          <option value="stationery">Stationery</option>
-          <option value="other">Other</option>
-        </select>
-
-        <select id="sort-filter" aria-label="Sort items">
-          <option value="newest">Newest first</option>
-          <option value="oldest">Oldest first</option>
-          <option value="title">Title (A–Z)</option>
-        </select>
-      </div>
-
-      <div class="item-grid" id="item-grid" aria-live="polite">
-        <p class="loading-message">Connecting to campus listings...</p>
-      </div>
-
-      <p class="error-message" id="error-message" role="alert" hidden></p>
-
-      <nav class="pagination" id="pagination" aria-label="Item pages">
-        <button
-          type="button"
-          id="previous-page"
-          class="page-button"
-          disabled
-        >
-          ← Previous
-        </button>
-
-        <span id="page-info" aria-live="polite">Page 1</span>
-
-        <button
-          type="button"
-          id="next-page"
-          class="page-button"
-          disabled
-        >
-          Next →
-        </button>
-      </nav>
-    </section>
-
-    <section class="report-section section" id="report">
-      <div class="report-intro">
-        <p class="eyebrow">HELP THE COMMUNITY</p>
-        <h2>Lost something?<br>Found something?</h2>
-        <p class="muted">
-          Share the details below to help reunite lost belongings
-          with their owners.
-        </p>
-      </div>
-
-      <form id="report-form" class="report-form">
-        <h3>Report an item</h3>
-        <p class="form-description">Fields marked * are required.</p>
-
-        <div class="form-group">
-          <label for="item-title">Item name *</label>
-          <input
-            type="text"
-            id="item-title"
-            name="title"
-            placeholder="e.g. Black wireless headphones"
-            minlength="2"
-            maxlength="100"
-            required
-          >
-        </div>
-
-        <div class="form-group">
-          <label for="item-type">Report type *</label>
-          <select id="item-type" name="type" required>
-            <option value="">Select report type</option>
-            <option value="lost">I lost this item</option>
-            <option value="found">I found this item</option>
-          </select>
-        </div>
-
-        <div class="form-group">
-          <label for="item-category">Category *</label>
-          <select id="item-category" name="category" required>
-            <option value="">Select a category</option>
-            <option value="electronics">Electronics</option>
-            <option value="identification">Identification</option>
-            <option value="books">Books</option>
-            <option value="clothing">Clothing</option>
-            <option value="accessories">Accessories</option>
-            <option value="stationery">Stationery</option>
-            <option value="other">Other</option>
-          </select>
-        </div>
-
-        <div class="form-group">
-          <label for="item-description">Description *</label>
-          <textarea
-            id="item-description"
-            name="description"
-            rows="4"
-            minlength="10"
-            maxlength="2000"
-            placeholder="Describe the item and identifying details..."
-            required
-          ></textarea>
-        </div>
-
-        <div class="form-group">
-          <label for="item-location">Campus location *</label>
-          <input
-            type="text"
-            id="item-location"
-            name="campusLocation"
-            maxlength="150"
-            placeholder="e.g. Library, second floor"
-            required
-          >
-        </div>
-
-        <div class="form-group">
-          <label for="item-date">Date lost or found *</label>
-          <input
-            type="date"
-            id="item-date"
-            name="dateOccurred"
-            required
-          >
-        </div>
-
-        <div class="form-group">
-          <label for="contact-name">Your name *</label>
-          <input
-            type="text"
-            id="contact-name"
-            name="contactName"
-            maxlength="100"
-            autocomplete="name"
-            placeholder="Enter your name"
-            required
-          >
-        </div>
-
-        <div class="form-group">
-          <label for="contact-email">Contact email *</label>
-          <input
-            type="email"
-            id="contact-email"
-            name="contactEmail"
-            maxlength="254"
-            autocomplete="email"
-            placeholder="you@example.com"
-            required
-          >
-        </div>
-
-                <div class="form-group">
-          <label for="item-image">Item Image *</label>
-          <input
-            type="file"
-            id="item-image"
-            name="image"
-            accept="image/jpeg,image/png,image/webp"
-            required
-          >
-          <small class="muted">
-            Accepted formats: JPEG, PNG, WebP. Maximum size: 5 MB.
-          </small>
-        </div>
-
-        <button
-          type="submit"
-          class="button button-primary"
-          id="submit-report"
-        >
-          Submit Report
-        </button>
-
-        <p
-          id="form-message"
-          class="form-message"
-          role="status"
-          aria-live="polite"
-          hidden
-        ></p>
-      </form>
-    </section>
-  </main>
-
-  <footer class="site-footer">
-    <a class="brand footer-brand" href="/">
-      <span class="brand-icon">C</span>
-      <span>Campus<span class="brand-accent">Find</span></span>
-    </a>
-    <p>Made for the Sai University campus community.</p>
-    <p>Campus Lost &amp; Found · 2026–2027</p>
-  </footer>
-</body>
-</html> -->
 
 <!DOCTYPE html>
 <html lang="en">
@@ -621,7 +12,9 @@
   <link rel="stylesheet" href="/css/style.css">
   <script src="/js/app.js" defer></script>
 </head>
+
 <body>
+  <!-- Header -->
   <header class="site-header">
     <a class="brand" href="/" aria-label="CampusFind home">
       <span class="brand-icon">C</span>
@@ -632,34 +25,58 @@
       <a class="nav-link active" href="/">Home</a>
       <a class="nav-link" href="#listings">Browse Items</a>
       <a class="nav-link" href="#report">Report an Item</a>
-     <a
-  class="nav-link"
-  href="#my-claims"
-  id="my-claims-nav"
-  hidden
->
-  My Claims
-</a>
 
-<a
-  class="nav-link"
-  href="#admin-review"
-  id="admin-review-nav"
-  hidden
->
-  Admin Review
-</a>
-<a class="nav-link" href="#my-reports" id="my-reports-nav" hidden>
-  My Reports
-</a>
-<a class="nav-link" href="#audit-logs" id="audit-logs-nav" hidden>
-  Audit Logs
-</a>
-<a class="nav-link" href="#analytics" id="analytics-nav" hidden>
-  Analytics
-</a>
+      <a
+        class="nav-link"
+        href="#my-claims"
+        id="my-claims-nav"
+        hidden
+      >
+        My Claims
+      </a>
 
-      <a class="nav-link" href="#notifications" id="notifications-nav" hidden>
+      <a
+        class="nav-link"
+        href="#admin-review"
+        id="admin-review-nav"
+        hidden
+      >
+        Admin Review
+      </a>
+
+      <a
+        class="nav-link"
+        href="#my-reports"
+        id="my-reports-nav"
+        hidden
+      >
+        My Reports
+      </a>
+
+      <a
+        class="nav-link"
+        href="#audit-logs"
+        id="audit-logs-nav"
+        hidden
+      >
+        Audit Logs
+      </a>
+
+      <a
+        class="nav-link"
+        href="#analytics"
+        id="analytics-nav"
+        hidden
+      >
+        Analytics
+      </a>
+
+      <a
+        class="nav-link"
+        href="#notifications"
+        id="notifications-nav"
+        hidden
+      >
         Notifications
         <span id="notification-count" class="notification-count" hidden>0</span>
       </a>
@@ -667,12 +84,14 @@
 
     <div class="header-actions">
       <a class="header-button" href="#report">+ Report Item</a>
+
       <button type="button" class="auth-button" id="open-auth">
         Login / Register
       </button>
 
       <div id="user-panel" hidden>
         <span id="current-user-name"></span>
+
         <button type="button" class="auth-button" id="logout-button">
           Logout
         </button>
@@ -685,6 +104,7 @@
     <section class="auth-section section" id="auth-section" hidden>
       <div class="auth-card">
         <h2 id="auth-title">Welcome to Findora</h2>
+
         <p class="muted" id="auth-description">
           Sign in to report lost or found items.
         </p>
@@ -693,6 +113,7 @@
           <button type="button" id="login-tab" class="auth-tab active">
             Login
           </button>
+
           <button type="button" id="register-tab" class="auth-tab">
             Register
           </button>
@@ -701,6 +122,7 @@
         <form id="auth-form">
           <div class="form-group" id="auth-name-group" hidden>
             <label for="auth-name">Full name</label>
+
             <input
               type="text"
               id="auth-name"
@@ -713,6 +135,7 @@
 
           <div class="form-group">
             <label for="auth-email">Email address</label>
+
             <input
               type="email"
               id="auth-email"
@@ -725,6 +148,7 @@
 
           <div class="form-group">
             <label for="auth-password">Password</label>
+
             <input
               type="password"
               id="auth-password"
@@ -736,7 +160,11 @@
             >
           </div>
 
-          <button type="submit" class="button button-primary" id="auth-submit">
+          <button
+            type="submit"
+            class="button button-primary"
+            id="auth-submit"
+          >
             Login
           </button>
 
@@ -758,6 +186,7 @@
     <!-- Hero Section -->
     <section class="hero">
       <p class="eyebrow">SAI UNIVERSITY · CAMPUS COMMUNITY</p>
+
       <h1>Lost something?<br><span>Let's find it.</span></h1>
 
       <p class="hero-description">
@@ -766,8 +195,13 @@
       </p>
 
       <div class="hero-actions">
-        <a class="button button-primary" href="#listings">Browse Items</a>
-        <a class="button button-secondary" href="#report">Report an Item</a>
+        <a class="button button-primary" href="#listings">
+          Browse Items
+        </a>
+
+        <a class="button button-secondary" href="#report">
+          Report an Item
+        </a>
       </div>
 
       <div class="trust-note">
@@ -782,6 +216,7 @@
         <div>
           <p class="eyebrow">COMMUNITY LISTINGS</p>
           <h2>Recent items</h2>
+
           <p class="muted">
             Browse lost and found belongings reported on campus.
           </p>
@@ -792,14 +227,44 @@
         </span>
       </div>
 
+      <!-- Advanced Discovery Filters -->
       <div class="search-panel">
+
         <label class="search-box">
           <span aria-hidden="true">⌕</span>
+
           <input
             type="search"
             id="search-input"
             placeholder="Search by item name or description..."
             aria-label="Search items"
+          >
+        </label>
+
+        <input
+          type="search"
+          id="location-filter"
+          placeholder="Filter by campus building or location"
+          aria-label="Filter by campus location"
+        >
+
+        <label class="date-filter">
+          <span>From</span>
+
+          <input
+            type="date"
+            id="date-from-filter"
+            aria-label="Filter from date"
+          >
+        </label>
+
+        <label class="date-filter">
+          <span>To</span>
+
+          <input
+            type="date"
+            id="date-to-filter"
+            aria-label="Filter to date"
           >
         </label>
 
@@ -823,18 +288,64 @@
         <select id="sort-filter" aria-label="Sort items">
           <option value="newest">Newest first</option>
           <option value="oldest">Oldest first</option>
-          <option value="title">Title (A–Z)</option>
+          <option value="title_asc">Title (A–Z)</option>
+          <option value="title_desc">Title (Z–A)</option>
         </select>
+
       </div>
 
+      <!-- Saved Searches -->
+      <div class="saved-search-panel" id="saved-search-panel" hidden>
+        <h3>Saved Searches</h3>
+
+        <div class="saved-search-controls">
+          <input
+            type="text"
+            id="saved-search-name"
+            placeholder="Enter a name for this search"
+            maxlength="60"
+            aria-label="Saved search name"
+          >
+
+          <button
+            type="button"
+            id="save-search-button"
+            class="button button-primary"
+          >
+            Save Current Search
+          </button>
+        </div>
+
+        <p
+          id="saved-search-message"
+          class="form-message"
+          role="status"
+          hidden
+        ></p>
+
+        <div id="saved-search-list" aria-live="polite"></div>
+      </div>
+
+      <!-- Item Results -->
       <div class="item-grid" id="item-grid" aria-live="polite">
-        <p class="loading-message">Connecting to campus listings...</p>
+        <p class="loading-message">
+          Connecting to campus listings...
+        </p>
       </div>
 
-      <p class="error-message" id="error-message" role="alert" hidden></p>
+      <p
+        class="error-message"
+        id="error-message"
+        role="alert"
+        hidden
+      ></p>
 
       <!-- Pagination -->
-      <nav class="pagination" id="pagination" aria-label="Item pages">
+      <nav
+        class="pagination"
+        id="pagination"
+        aria-label="Item pages"
+      >
         <button
           type="button"
           id="previous-page"
@@ -857,229 +368,240 @@
       </nav>
     </section>
 
-
-<!-- My Claims Section -->
-<section
-  class="my-claims-section section"
-  id="my-claims"
-  hidden
->
-  <div class="section-heading">
-    <div>
-      <p class="eyebrow">YOUR CLAIM ACTIVITY</p>
-      <h2>My Claims</h2>
-      <p class="muted">
-        Track your claims and confirm successful item recovery.
-      </p>
-    </div>
-
-    <button
-      type="button"
-      class="button button-secondary"
-      id="refresh-my-claims"
+    <!-- My Claims Section -->
+    <section
+      class="my-claims-section section"
+      id="my-claims"
+      hidden
     >
-      Refresh
-    </button>
-  </div>
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">YOUR CLAIM ACTIVITY</p>
+          <h2>My Claims</h2>
 
-  <div
-    id="my-claims-list"
-    class="my-claims-list"
-    aria-live="polite"
-  >
-    <p class="loading-message">Your claims will appear here.</p>
-  </div>
+          <p class="muted">
+            Track your claims and confirm successful item recovery.
+          </p>
+        </div>
 
-  <p
-    id="my-claims-message"
-    class="form-message"
-    role="status"
-    aria-live="polite"
-    hidden
-  ></p>
-</section>
-
-
-<!-- My Reports Section -->
-<section id="my-reports" class="page-section" hidden>
-  <div class="section-header">
-    <h2>My Reports</h2>
-    <button id="refresh-my-reports" class="btn btn-secondary">
-      Refresh
-    </button>
-  </div>
-
-  <div id="my-reports-message" class="message" hidden></div>
-
-  <div id="my-reports-list" class="items-grid">
-    <!-- User reports will be displayed here -->
-  </div>
-</section>
-
-<!-- Audit Logs Section -->
-<section id="audit-logs" class="page-section" hidden>
-  <div class="section-header">
-    <h2>Audit Logs</h2>
-    <button id="refresh-audit-logs" class="btn btn-secondary">
-      Refresh
-    </button>
-  </div>
-
-  <div id="audit-logs-message" class="message" hidden></div>
-
-  <div id="audit-logs-list" class="items-grid">
-    <!-- Audit log records will be displayed here -->
-  </div>
-
-  <div id="audit-logs-pagination"></div>
-</section>
-<!-- Admin Analytics Dashboard -->
-<section id="analytics" class="page-section" hidden>
-
-  <div class="section-header">
-    <div>
-      <h2>Admin Analytics Dashboard</h2>
-      <p class="muted">
-        Overview of campus reports, claims, recoveries and users.
-      </p>
-    </div>
-
-    <button
-      type="button"
-      id="refresh-analytics"
-      class="btn btn-secondary"
-    >
-      Refresh
-    </button>
-  </div>
-
-  <!-- Date Filters -->
-  <div class="analytics-filters">
-
-    <div>
-      <label for="analytics-from">From Date</label>
-      <input type="date" id="analytics-from">
-    </div>
-
-    <div>
-      <label for="analytics-to">To Date</label>
-      <input type="date" id="analytics-to">
-    </div>
-
-    <button
-      type="button"
-      id="apply-analytics-filter"
-      class="btn btn-primary"
-    >
-      Apply Filter
-    </button>
-
-    <button
-      type="button"
-      id="reset-analytics-filter"
-      class="btn btn-secondary"
-    >
-      Reset
-    </button>
-
-  </div>
-
-  <p
-    id="analytics-message"
-    class="message"
-    role="status"
-    aria-live="polite"
-    hidden
-  ></p>
-
-  <!-- Summary Cards -->
-  <div class="analytics-summary-grid">
-
-    <article class="analytics-card">
-      <h3>Total Reports</h3>
-      <p id="analytics-total-reports">0</p>
-      <span>Lost and found reports</span>
-    </article>
-
-    <article class="analytics-card">
-      <h3>Total Claims</h3>
-      <p id="analytics-total-claims">0</p>
-      <span>Submitted ownership claims</span>
-    </article>
-
-    <article class="analytics-card">
-      <h3>Completed Recoveries</h3>
-      <p id="analytics-recovered">0</p>
-      <span>Both parties confirmed handover</span>
-    </article>
-
-    <article class="analytics-card">
-      <h3>Total Users</h3>
-      <p id="analytics-total-users">0</p>
-      <span>Registered campus users</span>
-    </article>
-
-  </div>
-
-  <!-- Report Statistics -->
-  <div class="analytics-grid">
-
-    <article class="analytics-panel">
-      <h3>Report Status</h3>
-      <div id="analytics-report-status" class="analytics-chart">
-        Loading report statistics...
+        <button
+          type="button"
+          class="button button-secondary"
+          id="refresh-my-claims"
+        >
+          Refresh
+        </button>
       </div>
-    </article>
 
-    <article class="analytics-panel">
-      <h3>Category Distribution</h3>
-      <div id="analytics-categories" class="analytics-chart">
-        Loading categories...
+      <div
+        id="my-claims-list"
+        class="my-claims-list"
+        aria-live="polite"
+      >
+        <p class="loading-message">
+          Your claims will appear here.
+        </p>
       </div>
-    </article>
 
-    <article class="analytics-panel">
-      <h3>Campus Locations</h3>
-      <div id="analytics-locations" class="analytics-chart">
-        Loading locations...
+      <p
+        id="my-claims-message"
+        class="form-message"
+        role="status"
+        aria-live="polite"
+        hidden
+      ></p>
+    </section>
+
+    <!-- My Reports Section -->
+    <section id="my-reports" class="page-section" hidden>
+      <div class="section-header">
+        <h2>My Reports</h2>
+
+        <button
+          id="refresh-my-reports"
+          class="btn btn-secondary"
+        >
+          Refresh
+        </button>
       </div>
-    </article>
 
-    <article class="analytics-panel">
-      <h3>Monthly Report Trends</h3>
-      <div id="analytics-monthly" class="analytics-chart">
-        Loading monthly trends...
+      <div id="my-reports-message" class="message" hidden></div>
+
+      <div id="my-reports-list" class="items-grid">
+        <!-- User reports will be displayed here -->
       </div>
-    </article>
+    </section>
 
-  </div>
+    <!-- Audit Logs Section -->
+    <section id="audit-logs" class="page-section" hidden>
+      <div class="section-header">
+        <h2>Audit Logs</h2>
 
-  <!-- Additional Statistics -->
-  <div class="analytics-panel analytics-details">
-    <h3>Additional Statistics</h3>
+        <button
+          id="refresh-audit-logs"
+          class="btn btn-secondary"
+        >
+          Refresh
+        </button>
+      </div>
 
-    <div class="analytics-detail-grid">
-      <p>Lost Reports: <strong id="analytics-lost">0</strong></p>
-      <p>Found Reports: <strong id="analytics-found">0</strong></p>
-      <p>Pending Reports: <strong id="analytics-pending">0</strong></p>
-      <p>Approved Reports: <strong id="analytics-approved">0</strong></p>
-      <p>Rejected Reports: <strong id="analytics-rejected">0</strong></p>
-      <p>Active Reports: <strong id="analytics-active">0</strong></p>
-      <p>Claimed Reports: <strong id="analytics-claimed">0</strong></p>
-      <p>Resolved Reports: <strong id="analytics-resolved">0</strong></p>
-      <p>Duplicate Reports: <strong id="analytics-duplicates">0</strong></p>
-      <p>Suspicious Reports: <strong id="analytics-suspicious">0</strong></p>
-      <p>Pending Claims: <strong id="analytics-pending-claims">0</strong></p>
-      <p>Approved Claims: <strong id="analytics-approved-claims">0</strong></p>
-      <p>Rejected Claims: <strong id="analytics-rejected-claims">0</strong></p>
-      <p>Cancelled Claims: <strong id="analytics-cancelled-claims">0</strong></p>
-      <p>Recovery Rate: <strong id="analytics-recovery-rate">0%</strong></p>
-      <p>Administrators: <strong id="analytics-admins">0</strong></p>
-      <p>Regular Users: <strong id="analytics-regular-users">0</strong></p>
-    </div>
-  </div>
+      <div id="audit-logs-message" class="message" hidden></div>
 
-</section>
+      <div id="audit-logs-list" class="items-grid">
+        <!-- Audit log records will be displayed here -->
+      </div>
+
+      <div id="audit-logs-pagination"></div>
+    </section>
+
+    <!-- Admin Analytics Dashboard -->
+    <section id="analytics" class="page-section" hidden>
+
+      <div class="section-header">
+        <div>
+          <h2>Admin Analytics Dashboard</h2>
+
+          <p class="muted">
+            Overview of campus reports, claims, recoveries and users.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          id="refresh-analytics"
+          class="btn btn-secondary"
+        >
+          Refresh
+        </button>
+      </div>
+
+      <!-- Analytics Date Filters -->
+      <div class="analytics-filters">
+
+        <div>
+          <label for="analytics-from">From Date</label>
+          <input type="date" id="analytics-from">
+        </div>
+
+        <div>
+          <label for="analytics-to">To Date</label>
+          <input type="date" id="analytics-to">
+        </div>
+
+        <button
+          type="button"
+          id="apply-analytics-filter"
+          class="btn btn-primary"
+        >
+          Apply Filter
+        </button>
+
+        <button
+          type="button"
+          id="reset-analytics-filter"
+          class="btn btn-secondary"
+        >
+          Reset
+        </button>
+
+      </div>
+
+      <p
+        id="analytics-message"
+        class="message"
+        role="status"
+        aria-live="polite"
+        hidden
+      ></p>
+
+      <!-- Summary Cards -->
+      <div class="analytics-summary-grid">
+
+        <article class="analytics-card">
+          <h3>Total Reports</h3>
+          <p id="analytics-total-reports">0</p>
+          <span>Lost and found reports</span>
+        </article>
+
+        <article class="analytics-card">
+          <h3>Total Claims</h3>
+          <p id="analytics-total-claims">0</p>
+          <span>Submitted ownership claims</span>
+        </article>
+
+        <article class="analytics-card">
+          <h3>Completed Recoveries</h3>
+          <p id="analytics-recovered">0</p>
+          <span>Both parties confirmed handover</span>
+        </article>
+
+        <article class="analytics-card">
+          <h3>Total Users</h3>
+          <p id="analytics-total-users">0</p>
+          <span>Registered campus users</span>
+        </article>
+
+      </div>
+
+      <!-- Report Statistics -->
+      <div class="analytics-grid">
+
+        <article class="analytics-panel">
+          <h3>Report Status</h3>
+          <div id="analytics-report-status" class="analytics-chart">
+            Loading report statistics...
+          </div>
+        </article>
+
+        <article class="analytics-panel">
+          <h3>Category Distribution</h3>
+          <div id="analytics-categories" class="analytics-chart">
+            Loading categories...
+          </div>
+        </article>
+
+        <article class="analytics-panel">
+          <h3>Campus Locations</h3>
+          <div id="analytics-locations" class="analytics-chart">
+            Loading locations...
+          </div>
+        </article>
+
+        <article class="analytics-panel">
+          <h3>Monthly Report Trends</h3>
+          <div id="analytics-monthly" class="analytics-chart">
+            Loading monthly trends...
+          </div>
+        </article>
+
+      </div>
+
+      <!-- Additional Statistics -->
+      <div class="analytics-panel analytics-details">
+        <h3>Additional Statistics</h3>
+
+        <div class="analytics-detail-grid">
+          <p>Lost Reports: <strong id="analytics-lost">0</strong></p>
+          <p>Found Reports: <strong id="analytics-found">0</strong></p>
+          <p>Pending Reports: <strong id="analytics-pending">0</strong></p>
+          <p>Approved Reports: <strong id="analytics-approved">0</strong></p>
+          <p>Rejected Reports: <strong id="analytics-rejected">0</strong></p>
+          <p>Active Reports: <strong id="analytics-active">0</strong></p>
+          <p>Claimed Reports: <strong id="analytics-claimed">0</strong></p>
+          <p>Resolved Reports: <strong id="analytics-resolved">0</strong></p>
+          <p>Duplicate Reports: <strong id="analytics-duplicates">0</strong></p>
+          <p>Suspicious Reports: <strong id="analytics-suspicious">0</strong></p>
+          <p>Pending Claims: <strong id="analytics-pending-claims">0</strong></p>
+          <p>Approved Claims: <strong id="analytics-approved-claims">0</strong></p>
+          <p>Rejected Claims: <strong id="analytics-rejected-claims">0</strong></p>
+          <p>Cancelled Claims: <strong id="analytics-cancelled-claims">0</strong></p>
+          <p>Recovery Rate: <strong id="analytics-recovery-rate">0%</strong></p>
+          <p>Administrators: <strong id="analytics-admins">0</strong></p>
+          <p>Regular Users: <strong id="analytics-regular-users">0</strong></p>
+        </div>
+      </div>
+
+    </section>
 
     <!-- Notifications Section -->
     <section
@@ -1091,6 +613,7 @@
         <div>
           <p class="eyebrow">ACCOUNT UPDATES</p>
           <h2>Notifications</h2>
+
           <p class="muted">
             Stay updated about claims and item recovery.
           </p>
@@ -1110,7 +633,9 @@
         class="notification-list"
         aria-live="polite"
       >
-        <p class="loading-message">Loading notifications...</p>
+        <p class="loading-message">
+          Loading notifications...
+        </p>
       </div>
 
       <p
@@ -1121,54 +646,57 @@
         hidden
       ></p>
     </section>
+
     <!-- Admin Review Queue -->
-<section
-  class="admin-review-section section"
-  id="admin-review"
-  hidden
->
-  <div class="section-heading">
-    <div>
-      <p class="eyebrow">ADMINISTRATION</p>
-      <h2>Admin Review Queue</h2>
-      <p class="muted">
-        Review newly submitted lost and found reports.
-      </p>
-    </div>
-
-    <button
-      type="button"
-      class="button button-secondary"
-      id="refresh-admin-reports"
+    <section
+      class="admin-review-section section"
+      id="admin-review"
+      hidden
     >
-      Refresh
-    </button>
-  </div>
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">ADMINISTRATION</p>
+          <h2>Admin Review Queue</h2>
 
-  <div
-    id="admin-review-list"
-    class="admin-review-list"
-    aria-live="polite"
-  >
-    <p class="loading-message">
-      Pending reports will appear here.
-    </p>
-  </div>
+          <p class="muted">
+            Review newly submitted lost and found reports.
+          </p>
+        </div>
 
-  <p
-    id="admin-review-message"
-    class="form-message"
-    role="status"
-    aria-live="polite"
-    hidden
-  ></p>
-</section>
+        <button
+          type="button"
+          class="button button-secondary"
+          id="refresh-admin-reports"
+        >
+          Refresh
+        </button>
+      </div>
+
+      <div
+        id="admin-review-list"
+        class="admin-review-list"
+        aria-live="polite"
+      >
+        <p class="loading-message">
+          Pending reports will appear here.
+        </p>
+      </div>
+
+      <p
+        id="admin-review-message"
+        class="form-message"
+        role="status"
+        aria-live="polite"
+        hidden
+      ></p>
+    </section>
 
     <!-- Report Item Section -->
     <section class="report-section section" id="report">
       <div class="report-intro">
         <p class="eyebrow">HELP THE COMMUNITY</p>
         <h2>Lost something?<br>Found something?</h2>
+
         <p class="muted">
           Share the details below to help reunite lost belongings
           with their owners.
@@ -1181,6 +709,7 @@
 
         <div class="form-group">
           <label for="item-title">Item name *</label>
+
           <input
             type="text"
             id="item-title"
@@ -1194,6 +723,7 @@
 
         <div class="form-group">
           <label for="item-type">Report type *</label>
+
           <select id="item-type" name="type" required>
             <option value="">Select report type</option>
             <option value="lost">I lost this item</option>
@@ -1203,6 +733,7 @@
 
         <div class="form-group">
           <label for="item-category">Category *</label>
+
           <select id="item-category" name="category" required>
             <option value="">Select a category</option>
             <option value="electronics">Electronics</option>
@@ -1217,6 +748,7 @@
 
         <div class="form-group">
           <label for="item-description">Description *</label>
+
           <textarea
             id="item-description"
             name="description"
@@ -1230,6 +762,7 @@
 
         <div class="form-group">
           <label for="item-location">Campus location *</label>
+
           <input
             type="text"
             id="item-location"
@@ -1242,6 +775,7 @@
 
         <div class="form-group">
           <label for="item-date">Date lost or found *</label>
+
           <input
             type="date"
             id="item-date"
@@ -1252,6 +786,7 @@
 
         <div class="form-group">
           <label for="contact-name">Your name *</label>
+
           <input
             type="text"
             id="contact-name"
@@ -1265,6 +800,7 @@
 
         <div class="form-group">
           <label for="contact-email">Contact email *</label>
+
           <input
             type="email"
             id="contact-email"
@@ -1278,6 +814,7 @@
 
         <div class="form-group">
           <label for="item-image">Item Image *</label>
+
           <input
             type="file"
             id="item-image"
@@ -1285,6 +822,7 @@
             accept="image/jpeg,image/png,image/webp"
             required
           >
+
           <small class="muted">
             Accepted formats: JPEG, PNG, WebP. Maximum size: 5 MB.
           </small>
@@ -1307,6 +845,7 @@
         ></p>
       </form>
     </section>
+
   </main>
 
   <!-- Footer -->

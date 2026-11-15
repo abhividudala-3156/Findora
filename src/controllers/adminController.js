@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import Item from "../models/Item.js";
 import Notification from "../models/Notification.js";
 import { createAuditLog } from "../services/auditLogService.js";
+import { notifySavedSearchMatches } from "../services/savedSearchNotificationService.js";
 
 // Get all reports waiting for admin review.
 export async function getPendingReports(req, res) {
@@ -28,6 +29,7 @@ export async function getPendingReports(req, res) {
     });
   }
 }
+
 
 // Approve a pending report.
 export async function approveReport(req, res) {
@@ -61,22 +63,23 @@ export async function approveReport(req, res) {
     await item.save();
 
     // Record the approval in the audit log.
-try {
-  await createAuditLog({
-    actor: req.user._id,
-    action: "report_approved",
-    entityType: "item",
-    entityId: item._id,
-    details: {
-      title: item.title,
-      previousStatus: "pending",
-      newStatus: "approved",
-    },
-  });
-} catch (auditError) {
-  console.error("Audit log creation failed:", auditError.message);
-}
+    try {
+      await createAuditLog({
+        actor: req.user._id,
+        action: "report_approved",
+        entityType: "item",
+        entityId: item._id,
+        details: {
+          title: item.title,
+          previousStatus: "pending",
+          newStatus: "approved",
+        },
+      });
+    } catch (auditError) {
+      console.error("Audit log creation failed:", auditError.message);
+    }
 
+    // Notify the owner that the report was approved.
     if (item.owner) {
       await Notification.create({
         recipient: item.owner,
@@ -84,6 +87,16 @@ try {
         message: `Your report "${item.title}" has been approved.`,
         item: item._id,
       });
+    }
+
+    // Notify users whose saved searches match this approved report.
+    try {
+      await notifySavedSearchMatches(item);
+    } catch (notificationError) {
+      console.error(
+        "Saved search notification failed:",
+        notificationError.message
+      );
     }
 
     return res.status(200).json({
@@ -100,6 +113,7 @@ try {
     });
   }
 }
+
 
 // Reject a pending report with a reason.
 export async function rejectReport(req, res) {

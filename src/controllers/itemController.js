@@ -155,6 +155,20 @@ try {
   }
 }
 
+
+function isValidDateString(value) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+
+  const date = new Date(`${value}T00:00:00.000Z`);
+
+  return (
+    !Number.isNaN(date.getTime()) &&
+    date.toISOString().slice(0, 10) === value
+  );
+}
+
 export async function getItems(req, res) {
   try {
     const {
@@ -163,6 +177,8 @@ export async function getItems(req, res) {
       category,
       status = "active",
       campusLocation,
+      dateFrom,
+      dateTo,
       sort = "newest",
       page = "1",
       limit = "10",
@@ -225,10 +241,42 @@ export async function getItems(req, res) {
       });
     }
 
-    // Public listings must contain only admin-approved reports.
-const filter = {
-  moderationStatus: "approved",
-};
+    if (
+      (dateFrom && !isValidDateString(dateFrom)) ||
+      (dateTo && !isValidDateString(dateTo))
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Dates must use a valid YYYY-MM-DD format",
+      });
+    }
+
+    if (dateFrom && dateTo && dateFrom > dateTo) {
+      return res.status(400).json({
+        success: false,
+        message: "Start date cannot be after end date",
+      });
+    }
+
+    const sortOptions = {
+      newest: { createdAt: -1 },
+      oldest: { createdAt: 1 },
+      title: { title: 1 },
+      title_asc: { title: 1 },
+      title_desc: { title: -1 },
+    };
+
+    if (!Object.hasOwn(sortOptions, sort)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid sort option",
+      });
+    }
+
+    // Public listings must only contain approved reports.
+    const filter = {
+      moderationStatus: "approved",
+    };
 
     if (status !== "all") {
       filter.status = status;
@@ -245,54 +293,52 @@ const filter = {
     }
 
     if (search) {
-      const escapedSearch = escapeRegex(String(search));
+      const searchRegex = {
+        $regex: escapeRegex(String(search)),
+        $options: "i",
+      };
 
       filter.$or = [
-        {
-          title: {
-            $regex: escapedSearch,
-            $options: "i",
-          },
-        },
-        {
-          description: {
-            $regex: escapedSearch,
-            $options: "i",
-          },
-        },
-        {
-          campusLocation: {
-            $regex: escapedSearch,
-            $options: "i",
-          },
-        },
+        { title: searchRegex },
+        { description: searchRegex },
+        { campusLocation: searchRegex },
       ];
     }
 
-    const sortOptions = {
-      newest: { createdAt: -1 },
-      oldest: { createdAt: 1 },
-      title: { title: 1 },
-    };
+    // Apply inclusive date filtering to dateOccurred.
+    if (dateFrom || dateTo) {
+      filter.dateOccurred = {};
 
-    if (!Object.hasOwn(sortOptions, sort)) {
-      return res.status(400).json({
-        success: false,
-        message: "Sort must be newest, oldest, or title",
-      });
+      if (dateFrom) {
+        filter.dateOccurred.$gte = new Date(
+          `${dateFrom}T00:00:00.000Z`
+        );
+      }
+
+      if (dateTo) {
+        const nextDay = new Date(
+          `${dateTo}T00:00:00.000Z`
+        );
+
+        nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+
+        filter.dateOccurred.$lt = nextDay;
+      }
     }
 
     const skip = (pageNumber - 1) * pageSize;
 
- const [items, totalItems] = await Promise.all([
-  Item.find(filter)
-    .populate("owner", "_id")
-    .sort(sortOptions[sort])
-    .skip(skip)
-    .limit(pageSize)
-    .lean(),
-  Item.countDocuments(filter),
-]);
+    const [items, totalItems] = await Promise.all([
+      Item.find(filter)
+        .populate("owner", "_id")
+        .sort(sortOptions[sort])
+        .skip(skip)
+        .limit(pageSize)
+        .lean(),
+
+      Item.countDocuments(filter),
+    ]);
+
     return res.status(200).json({
       success: true,
       data: items,
@@ -307,6 +353,7 @@ const filter = {
     return handleError(error, res);
   }
 }
+
 
 // Get reports submitted by the logged-in user.
 export async function getMyReports(req, res) {

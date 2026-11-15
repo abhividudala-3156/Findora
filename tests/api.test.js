@@ -30,6 +30,7 @@ import {
 import Claim from "../src/models/Claim.js";
 
 import Notification from "../src/models/Notification.js";
+import SavedSearch from "../src/models/SavedSearch.js";
 
 let agent;
 let csrfToken;
@@ -228,6 +229,7 @@ describe("Findora API", () => {
     await Item.deleteMany({});
     await User.deleteMany({});
     await Claim.deleteMany({});
+    await SavedSearch.deleteMany({});
 
     const testSession = await createLoggedInAgent(
       "api-test@example.com"
@@ -251,6 +253,7 @@ describe("Findora API", () => {
         await Item.deleteMany({});
         await User.deleteMany({});
         await Claim.deleteMany({});
+        await SavedSearch.deleteMany({});
       }
         } finally {
       try {
@@ -591,6 +594,58 @@ describe("Findora API", () => {
     const savedItem = await Item.findById(item._id);
     assert.equal(savedItem.title, item.title);
   });
+
+it("notifies users when an approved report matches their saved searches", async () => {
+  // Create another user who has a saved search.
+  const subscriber = await createLoggedInAgent(
+    "saved-search-user@example.com"
+  );
+
+  await SavedSearch.create({
+    user: subscriber.userId,
+    name: "Stationery near library",
+    filters: {
+      type: "lost",
+      category: "stationery",
+      campusLocation: "University Library",
+      status: "active",
+    },
+  });
+
+  // Create a matching report using the current user.
+  const itemResponse = await agent
+    .post("/api/items")
+    .set("x-csrf-token", csrfToken)
+    .send(createValidItem());
+
+  assert.equal(itemResponse.status, 201);
+
+  const itemId = itemResponse.body.data._id;
+
+  // Make the current user an administrator.
+  await User.findByIdAndUpdate(currentUserId, {
+    $set: { role: "admin" },
+  });
+
+  // Approve the report.
+  const approvalResponse = await agent
+    .patch(`/api/items/admin/review/${itemId}/approve`)
+    .set("x-csrf-token", csrfToken)
+    .send({});
+
+  assert.equal(approvalResponse.status, 200);
+
+  // Verify that the subscriber received a matching notification.
+  const notification = await Notification.findOne({
+    recipient: subscriber.userId,
+    type: "saved_search_match",
+    item: itemId,
+  });
+
+  assert.ok(notification);
+  assert.equal(notification.isRead, false);
+});
+
 
   it("should reject updates without authentication", async () => {
     const item = await createItem();

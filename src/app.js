@@ -7,8 +7,10 @@ import { fileURLToPath } from "node:url";
 import itemRoutes from "./routes/itemRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
+import savedSearchRoutes from "./routes/savedSearchRoutes.js";
 import sessionMiddleware from "./config/session.js";
 import { csrfSynchronisedProtection } from "./config/csrf.js";
+
 
 const app = express();
 
@@ -38,6 +40,7 @@ app.use(express.static(path.join(projectRoot, "public")));
 app.use("/api/items", itemRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/saved-searches", savedSearchRoutes);
 
 app.get("/api/health", (req, res) => {
   const databaseConnected = mongoose.connection.readyState === 1;

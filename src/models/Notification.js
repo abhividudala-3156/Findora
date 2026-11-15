@@ -20,6 +20,7 @@ const notificationSchema = new mongoose.Schema(
         "recovery_confirmed",
         "report_approved",
         "report_rejected",
+        "saved_search_match",
       ],
     },
 

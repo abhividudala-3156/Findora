@@ -12,6 +12,14 @@ const typeFilter = document.getElementById("type-filter");
 const categoryFilter = document.getElementById("category-filter");
 const sortFilter = document.getElementById("sort-filter");
 const errorMessage = document.getElementById("error-message");
+const savedSearchPanel = document.getElementById("saved-search-panel");
+const savedSearchName = document.getElementById("saved-search-name");
+const saveSearchButton = document.getElementById("save-search-button");
+const savedSearchMessage = document.getElementById("saved-search-message");
+const savedSearchList = document.getElementById("saved-search-list");
+const locationFilter = document.getElementById("location-filter");
+const dateFromFilter = document.getElementById("date-from-filter");
+const dateToFilter = document.getElementById("date-to-filter");
 
 const previousPageButton = document.getElementById("previous-page");
 const nextPageButton = document.getElementById("next-page");
@@ -122,6 +130,7 @@ let searchTimer;
 let currentRequest = null;
 
 let currentUser = null;
+let savedSearches = [];
 let authMode = "login";
 
 // ==========================================
@@ -231,6 +240,19 @@ async function patchJson(url, data = {}) {
 
   return readJsonResponse(response);
 }
+async function deleteJson(url) {
+  const csrfToken = await getCsrfToken();
+
+  const response = await fetch(url, {
+    method: "DELETE",
+    credentials: "same-origin",
+    headers: {
+      "x-csrf-token": csrfToken,
+    },
+  });
+
+  return readJsonResponse(response);
+}
 
 
 async function postForm(url, formData) {
@@ -306,6 +328,15 @@ function updateAuthenticationUI() {
     updateNotificationsVisibility();
     updateMyClaimsVisibility();
     updateAdminReviewVisibility();
+     savedSearchPanel.hidden = !currentUser;
+
+    if (currentUser) {
+      loadSavedSearches();
+    } else {
+      savedSearches = [];
+      savedSearchList.innerHTML = "";
+      savedSearchMessage.hidden = true;
+    }
 }
 
 function updateNotificationsVisibility() {
@@ -2382,6 +2413,152 @@ function updatePagination(pagination) {
 // ==========================================
 // 15. LOAD ITEMS
 // ==========================================
+function getCurrentSearchFilters() {
+  return {
+    search: searchInput.value.trim(),
+    type: typeFilter.value,
+    category: categoryFilter.value,
+    campusLocation: locationFilter.value.trim(),
+    dateFrom: dateFromFilter.value,
+    dateTo: dateToFilter.value,
+    sort: sortFilter.value,
+    status: "active",
+  };
+}
+function showSavedSearchMessage(message, isError = false) {
+  savedSearchMessage.textContent = message;
+  savedSearchMessage.hidden = false;
+  savedSearchMessage.classList.toggle("error", isError);
+}
+async function saveCurrentSearch() {
+  const name = savedSearchName.value.trim();
+
+  if (!name) {
+    showSavedSearchMessage("Please enter a name for this search.", true);
+    return;
+  }
+
+  try {
+    const result = await postJson("/api/saved-searches", {
+      name,
+      filters: getCurrentSearchFilters(),
+    });
+
+    savedSearchName.value = "";
+    showSavedSearchMessage("Search saved successfully.");
+    await loadSavedSearches();
+  } catch (error) {
+    showSavedSearchMessage(error.message, true);
+  }
+}
+async function loadSavedSearches() {
+  try {
+    const response = await fetch("/api/saved-searches", {
+      credentials: "same-origin",
+    });
+
+    const result = await readJsonResponse(response);
+
+    savedSearches = result.data;
+    displaySavedSearches();
+  } catch (error) {
+    savedSearchList.textContent = error.message;
+  }
+}
+function displaySavedSearches() {
+  savedSearchList.innerHTML = "";
+
+  if (savedSearches.length === 0) {
+    savedSearchList.textContent = "No saved searches yet.";
+    return;
+  }
+
+  savedSearches.forEach((savedSearch) => {
+    const searchItem = document.createElement("div");
+    searchItem.className = "saved-search-item";
+
+    const name = document.createElement("h4");
+    name.textContent = savedSearch.name;
+
+    const runButton = document.createElement("button");
+    runButton.type = "button";
+    runButton.textContent = "Run Search";
+    runButton.addEventListener("click", () => {
+      applySavedSearch(savedSearch);
+    });
+        const editButton = document.createElement("button");
+    editButton.type = "button";
+    editButton.textContent = "Edit";
+    editButton.addEventListener("click", () => {
+      editSavedSearch(savedSearch);
+    });
+
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.textContent = "Delete";
+    deleteButton.addEventListener("click", () => {
+      removeSavedSearch(savedSearch._id);
+    });
+
+    searchItem.append(name, runButton, editButton, deleteButton);
+    savedSearchList.appendChild(searchItem);
+  });
+}
+function applySavedSearch(savedSearch) {
+  const filters = savedSearch.filters;
+
+  searchInput.value = filters.search || "";
+  typeFilter.value = filters.type || "";
+  categoryFilter.value = filters.category || "";
+  locationFilter.value = filters.campusLocation || "";
+  dateFromFilter.value = filters.dateFrom || "";
+  dateToFilter.value = filters.dateTo || "";
+  sortFilter.value = filters.sort || "newest";
+
+  currentPage = 1;
+  loadItems();
+
+  showSavedSearchMessage(`Applied search: ${savedSearch.name}`);
+}
+async function editSavedSearch(savedSearch) {
+  const newName = prompt("Enter a new name:", savedSearch.name);
+
+  if (newName === null) {
+    return;
+  }
+
+  if (!newName.trim()) {
+    showSavedSearchMessage("Search name cannot be empty.", true);
+    return;
+  }
+
+  try {
+    await patchJson(`/api/saved-searches/${savedSearch._id}`, {
+      name: newName.trim(),
+    });
+
+    showSavedSearchMessage("Saved search renamed successfully.");
+    await loadSavedSearches();
+  } catch (error) {
+    showSavedSearchMessage(error.message, true);
+  }
+}
+async function removeSavedSearch(id) {
+  const confirmed = confirm("Are you sure you want to delete this saved search?");
+
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    await deleteJson(`/api/saved-searches/${id}`);
+
+    showSavedSearchMessage("Saved search deleted successfully.");
+    await loadSavedSearches();
+  } catch (error) {
+    showSavedSearchMessage(error.message, true);
+  }
+}
 
 async function loadItems() {
   if (currentRequest) {
@@ -2397,11 +2574,17 @@ async function loadItems() {
   const type = typeFilter.value;
   const category = categoryFilter.value;
   const sort = sortFilter.value;
+  const campusLocation = locationFilter.value.trim();
+  const dateFrom = dateFromFilter.value;
+  const dateTo = dateToFilter.value;
 
   if (search) params.set("search", search);
   if (type) params.set("type", type);
   if (category) params.set("category", category);
   if (sort) params.set("sort", sort);
+  if (campusLocation) params.set("campusLocation", campusLocation);
+  if (dateFrom) params.set("dateFrom", dateFrom);
+  if (dateTo) params.set("dateTo", dateTo);
 
   params.set("page", String(currentPage));
   params.set("limit", String(pageLimit));
@@ -2438,6 +2621,7 @@ async function loadItems() {
 
     displayItems(result.data, result.pagination.totalItems);
     updatePagination(result.pagination);
+
   } catch (error) {
     if (error.name === "AbortError") {
       return;
@@ -2459,12 +2643,18 @@ async function loadItems() {
     errorMessage.hidden = false;
 
     console.error("Failed to load items:", error);
+
   } finally {
     if (currentRequest === controller) {
       currentRequest = null;
     }
   }
 }
+
+
+// ==========================================
+// 16. SEARCH AND FILTER EVENTS
+// ==========================================
 
 // ==========================================
 // 16. SEARCH AND FILTER EVENTS
@@ -2475,6 +2665,7 @@ function resetPageAndLoadItems() {
   loadItems();
 }
 
+// Keyword search
 searchInput.addEventListener("input", () => {
   clearTimeout(searchTimer);
 
@@ -2483,9 +2674,26 @@ searchInput.addEventListener("input", () => {
   }, 300);
 });
 
+// Location search
+locationFilter.addEventListener("input", () => {
+  clearTimeout(searchTimer);
+
+  searchTimer = setTimeout(() => {
+    resetPageAndLoadItems();
+  }, 300);
+});
+
+// Date filters
+dateFromFilter.addEventListener("change", resetPageAndLoadItems);
+dateToFilter.addEventListener("change", resetPageAndLoadItems);
+
+// Other filters
 typeFilter.addEventListener("change", resetPageAndLoadItems);
 categoryFilter.addEventListener("change", resetPageAndLoadItems);
 sortFilter.addEventListener("change", resetPageAndLoadItems);
+
+// Save search
+saveSearchButton.addEventListener("click", saveCurrentSearch);
 
 // ==========================================
 // 17. PAGINATION EVENTS
