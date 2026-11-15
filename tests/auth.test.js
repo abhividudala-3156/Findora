@@ -19,6 +19,7 @@ import { sessionStore } from "../src/config/session.js";
 
 let agent;
 let csrfToken;
+let initialSessionCookie;
 
 describe("Findora Authentication API", () => {
   before(async () => {
@@ -50,7 +51,7 @@ describe("Findora Authentication API", () => {
   });
 
   // Give each test an independent session and CSRF token.
-  beforeEach(async () => {
+    beforeEach(async () => {
     await User.deleteMany({});
 
     agent = request.agent(app);
@@ -62,6 +63,12 @@ describe("Findora Authentication API", () => {
       200,
       "Failed to obtain a CSRF token"
     );
+
+    initialSessionCookie = csrfResponse.headers["set-cookie"]?.find(
+      (value) => value.startsWith("findora.sid=")
+    );
+
+    assert.ok(initialSessionCookie, "Initial session cookie should exist");
 
     csrfToken = csrfResponse.body.csrfToken;
 
@@ -304,17 +311,22 @@ describe("Findora Authentication API", () => {
     );
     assert.equal(loginResponse.body.user.role, "user");
     assert.equal("passwordHash" in loginResponse.body.user, false);
-
     const cookie = loginResponse.headers["set-cookie"];
-
     assert.ok(cookie, "Login should set a session cookie");
     assert.ok(
       cookie.some((value) => value.startsWith("findora.sid=")),
       "Session cookie should use the expected name"
     );
-
+    const loginSessionCookie = cookie.find(
+      (value) => value.startsWith("findora.sid=")
+    );
+    assert.ok(loginSessionCookie, "Login session cookie should exist");
+    assert.notEqual(
+      initialSessionCookie.split(";")[0],
+      loginSessionCookie.split(";")[0],
+      "Session ID should change after login"
+    );
     const meResponse = await agent.get("/api/auth/me");
-
     assert.equal(meResponse.status, 200);
     assert.equal(meResponse.body.success, true);
     assert.equal(
