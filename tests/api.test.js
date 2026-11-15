@@ -1948,4 +1948,289 @@ it("prevents a claimant from confirming recovery twice", async () => {
     const savedItem = await Item.findById(itemId);
     assert.equal(savedItem.moderationStatus, "pending");
   });
+    it("does not allow item updates to change protected fields", async () => {
+    const item = await createItem();
+
+    const response = await agent
+      .patch(`/api/items/${item._id}`)
+      .set("x-csrf-token", csrfToken)
+      .send({
+        title: "Updated notebook title",
+        owner: new mongoose.Types.ObjectId().toString(),
+        status: "resolved",
+        moderationStatus: "approved",
+      });
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.data.title, "Updated notebook title");
+    assert.equal(response.body.data.owner.toString(), currentUserId);
+    assert.equal(response.body.data.status, "active");
+    assert.equal(response.body.data.moderationStatus, "pending");
+
+    const savedItem = await Item.findById(item._id);
+
+    assert.equal(savedItem.owner.toString(), currentUserId);
+    assert.equal(savedItem.status, "active");
+    assert.equal(savedItem.moderationStatus, "pending");
+  });
+
+  it("prevents an item owner from claiming their own report", async () => {
+    const item = await createItem();
+
+    const response = await agent
+      .post(`/api/items/${item._id}/claims`)
+      .set("x-csrf-token", csrfToken)
+      .send({
+        message: "I am the owner of this reported item.",
+      });
+
+    assert.equal(response.status, 403);
+    assert.equal(response.body.success, false);
+
+    const claimCount = await Claim.countDocuments({
+      item: item._id,
+    });
+
+    assert.equal(claimCount, 0);
+  });
+
+  it("prevents claims on reports awaiting admin approval", async () => {
+    const itemResponse = await agent
+      .post("/api/items")
+      .set("x-csrf-token", csrfToken)
+      .send(createValidItem());
+
+    assert.equal(itemResponse.status, 201);
+
+    const itemId = itemResponse.body.data._id;
+
+    const claimant = await createLoggedInAgent(
+      "pending-report-claimant@example.com"
+    );
+
+    const response = await claimant.agent
+      .post(`/api/items/${itemId}/claims`)
+      .set("x-csrf-token", claimant.csrfToken)
+      .send({
+        message: "I can identify this item using its unique details.",
+      });
+
+    assert.equal(response.status, 403);
+    assert.equal(response.body.success, false);
+
+    const claimCount = await Claim.countDocuments({
+      item: itemId,
+    });
+
+    assert.equal(claimCount, 0);
+  });
+
+  it("rejects claim submission without a CSRF token", async () => {
+    const item = await createItem();
+
+    const claimant = await createLoggedInAgent(
+      "claim-csrf-test@example.com"
+    );
+
+    const response = await claimant.agent
+      .post(`/api/items/${item._id}/claims`)
+      .send({
+        message: "I can identify this item using its unique details.",
+      });
+
+    assert.equal(response.status, 403);
+
+    const claimCount = await Claim.countDocuments({
+      item: item._id,
+    });
+
+    assert.equal(claimCount, 0);
+  });
+
+  it("rejects claim approval without a CSRF token", async () => {
+    const item = await createItem();
+
+    const claimant = await createLoggedInAgent(
+      "approval-csrf-claimant@example.com"
+    );
+
+    const claimResponse = await claimant.agent
+      .post(`/api/items/${item._id}/claims`)
+      .set("x-csrf-token", claimant.csrfToken)
+      .send({
+        message: "I can identify this item using its unique details.",
+      });
+
+    assert.equal(claimResponse.status, 201);
+
+    const claimId = claimResponse.body.data._id;
+
+    const response = await agent
+      .patch(`/api/items/${item._id}/claims/${claimId}/approve`);
+
+    assert.equal(response.status, 403);
+
+    const savedClaim = await Claim.findById(claimId);
+    assert.equal(savedClaim.status, "pending");
+  });
+
+  it("prevents recovery confirmation before a claim is approved", async () => {
+    const item = await createItem();
+
+    const claimant = await createLoggedInAgent(
+      "pending-recovery-claimant@example.com"
+    );
+
+    const claimResponse = await claimant.agent
+      .post(`/api/items/${item._id}/claims`)
+      .set("x-csrf-token", claimant.csrfToken)
+      .send({
+        message: "I can identify this item using its unique details.",
+      });
+
+    assert.equal(claimResponse.status, 201);
+
+    const claimId = claimResponse.body.data._id;
+
+    const response = await claimant.agent
+      .patch(
+        `/api/items/${item._id}/claims/${claimId}/confirm-recovery`
+      )
+      .set("x-csrf-token", claimant.csrfToken);
+
+    assert.equal(response.status, 409);
+
+    const savedClaim = await Claim.findById(claimId);
+
+    assert.equal(savedClaim.status, "pending");
+    assert.equal(savedClaim.returnConfirmedByClaimant, false);
+    assert.equal(savedClaim.returnConfirmedByOwner, false);
+
+    const savedItem = await Item.findById(item._id);
+    assert.equal(savedItem.status, "active");
+  });
+
+  it("rejects recovery confirmation without a CSRF token", async () => {
+    const item = await createItem();
+
+    const claimant = await createLoggedInAgent(
+      "recovery-csrf-claimant@example.com"
+    );
+
+    const claimResponse = await claimant.agent
+      .post(`/api/items/${item._id}/claims`)
+      .set("x-csrf-token", claimant.csrfToken)
+      .send({
+        message: "I can identify this item using its unique details.",
+      });
+
+    assert.equal(claimResponse.status, 201);
+
+    const claimId = claimResponse.body.data._id;
+
+    await Claim.findByIdAndUpdate(claimId, {
+      $set: { status: "approved" },
+    });
+
+    await Item.findByIdAndUpdate(item._id, {
+      $set: { status: "claimed" },
+    });
+
+    const response = await claimant.agent.patch(
+      `/api/items/${item._id}/claims/${claimId}/confirm-recovery`
+    );
+
+    assert.equal(response.status, 403);
+
+    const savedClaim = await Claim.findById(claimId);
+    assert.equal(savedClaim.returnConfirmedByClaimant, false);
+  });
+
+  it("does not allow a claim to be reviewed through a different item", async () => {
+    const firstItem = await createItem();
+    const secondItem = await createItem({
+      title: "Another reported notebook",
+    });
+
+    const claimant = await createLoggedInAgent(
+      "cross-item-claimant@example.com"
+    );
+
+    const claimResponse = await claimant.agent
+      .post(`/api/items/${firstItem._id}/claims`)
+      .set("x-csrf-token", claimant.csrfToken)
+      .send({
+        message: "I can identify this item using its unique details.",
+      });
+
+    assert.equal(claimResponse.status, 201);
+
+    const claimId = claimResponse.body.data._id;
+
+    const response = await agent
+      .patch(
+        `/api/items/${secondItem._id}/claims/${claimId}/approve`
+      )
+      .set("x-csrf-token", csrfToken);
+
+    assert.equal(response.status, 404);
+
+    const savedClaim = await Claim.findById(claimId);
+    assert.equal(savedClaim.status, "pending");
+  });
+
+  it("rejects an invalid notification ID", async () => {
+    const response = await agent
+      .patch("/api/notifications/not-a-valid-id/read")
+      .set("x-csrf-token", csrfToken);
+
+    assert.equal(response.status, 400);
+    assert.equal(response.body.success, false);
+  });
+
+  it("rejects admin moderation requests with an invalid report ID", async () => {
+    await User.findByIdAndUpdate(currentUserId, {
+      $set: { role: "admin" },
+    });
+
+    const response = await agent
+      .patch("/api/items/admin/review/not-a-valid-id/approve")
+      .set("x-csrf-token", csrfToken)
+      .send({});
+
+    assert.equal(response.status, 400);
+    assert.equal(response.body.success, false);
+  });
+
+  it("prevents an administrator from reviewing the same report twice", async () => {
+    const itemResponse = await agent
+      .post("/api/items")
+      .set("x-csrf-token", csrfToken)
+      .send(createValidItem());
+
+    assert.equal(itemResponse.status, 201);
+
+    const itemId = itemResponse.body.data._id;
+
+    await User.findByIdAndUpdate(currentUserId, {
+      $set: { role: "admin" },
+    });
+
+    const firstResponse = await agent
+      .patch(`/api/items/admin/review/${itemId}/approve`)
+      .set("x-csrf-token", csrfToken)
+      .send({});
+
+    assert.equal(firstResponse.status, 200);
+
+    const secondResponse = await agent
+      .patch(`/api/items/admin/review/${itemId}/approve`)
+      .set("x-csrf-token", csrfToken)
+      .send({});
+
+    assert.equal(secondResponse.status, 404);
+
+    const savedItem = await Item.findById(itemId);
+    assert.equal(savedItem.moderationStatus, "approved");
+  });
 });

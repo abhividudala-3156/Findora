@@ -465,4 +465,81 @@ describe("Findora Authentication API", () => {
       sessionGetMock.mock.restore();
     }
   });
+    it("rejects names shorter than two characters and longer than 80 characters", async () => {
+    const shortNameResponse = await agent
+      .post("/api/auth/register")
+      .set("x-csrf-token", csrfToken)
+      .send({
+        name: "A",
+        email: "short-name@example.com",
+        password: "SecurePass123!",
+      });
+
+    assert.equal(shortNameResponse.status, 400);
+
+    const longNameResponse = await agent
+      .post("/api/auth/register")
+      .set("x-csrf-token", csrfToken)
+      .send({
+        name: "A".repeat(81),
+        email: "long-name@example.com",
+        password: "SecurePass123!",
+      });
+
+    assert.equal(longNameResponse.status, 400);
+  });
+
+  it("rejects passwords exceeding 72 UTF-8 bytes", async () => {
+    const response = await agent
+      .post("/api/auth/register")
+      .set("x-csrf-token", csrfToken)
+      .send({
+        name: "Password Limit Test",
+        email: "password-limit@example.com",
+        password: "é".repeat(37),
+      });
+
+    assert.equal(response.status, 400);
+
+    const user = await User.findOne({
+      email: "password-limit@example.com",
+    });
+
+    assert.equal(user, null);
+  });
+
+  it("rejects login requests with missing or invalid fields", async () => {
+    const response = await agent
+      .post("/api/auth/login")
+      .set("x-csrf-token", csrfToken)
+      .send({
+        email: "student@example.com",
+      });
+
+    assert.equal(response.status, 400);
+    assert.equal(response.body.success, false);
+  });
+
+  it("rejects an existing session after its user account is deleted", async () => {
+    await registerTestUser();
+
+    const loginResponse = await agent
+      .post("/api/auth/login")
+      .set("x-csrf-token", csrfToken)
+      .send({
+        email: "login-test@example.com",
+        password: "SecurePass123!",
+      });
+
+    assert.equal(loginResponse.status, 200);
+
+    await User.deleteOne({
+      email: "login-test@example.com",
+    });
+
+    const response = await agent.get("/api/auth/me");
+
+    assert.equal(response.status, 401);
+    assert.equal(response.body.success, false);
+  });
 });
