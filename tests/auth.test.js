@@ -321,6 +321,9 @@ describe("Findora Authentication API", () => {
       (value) => value.startsWith("findora.sid=")
     );
     assert.ok(loginSessionCookie, "Login session cookie should exist");
+    assert.match(loginSessionCookie, /HttpOnly/i);
+    assert.match(loginSessionCookie, /SameSite=Lax/i);
+    assert.match(loginSessionCookie, /Path=\//i);
     assert.notEqual(
       initialSessionCookie.split(";")[0],
       loginSessionCookie.split(";")[0],
