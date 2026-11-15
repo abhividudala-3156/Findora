@@ -388,4 +388,56 @@ describe("Findora Authentication API", () => {
     assert.equal(adminResponse.status, 401);
     assert.equal(adminResponse.body.success, false);
   });
+  it("rejects requests when the MongoDB session has expired", async () => {
+    await registerTestUser();
+
+    const loginResponse = await agent
+      .post("/api/auth/login")
+      .set("x-csrf-token", csrfToken)
+      .send({
+        email: "login-test@example.com",
+        password: "SecurePass123!",
+      });
+
+    assert.equal(loginResponse.status, 200);
+
+    const cookie = loginResponse.headers["set-cookie"].find(
+      (value) => value.startsWith("findora.sid=")
+    );
+
+    assert.ok(cookie, "Login session cookie should exist");
+
+    const cookieValue = decodeURIComponent(
+      cookie.split(";")[0].split("=")[1]
+    );
+
+    const sessionId = cookieValue.slice(2).split(".")[0];
+
+    assert.ok(sessionId, "Session ID should exist");
+
+    const result = await mongoose.connection
+      .collection("sessions")
+      .updateOne(
+        { _id: sessionId },
+        {
+          $set: {
+            expires: new Date(Date.now() - 1000),
+          },
+        }
+      );
+
+    assert.equal(result.matchedCount, 1);
+
+    const meResponse = await agent.get("/api/auth/me");
+
+    assert.equal(meResponse.status, 401);
+    assert.equal(meResponse.body.success, false);
+
+    const protectedResponse = await agent.get(
+      "/api/items/my-reports"
+    );
+
+    assert.equal(protectedResponse.status, 401);
+    assert.equal(protectedResponse.body.success, false);
+  });
 });
