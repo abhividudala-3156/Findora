@@ -12,6 +12,7 @@ import request from "supertest";
 import mongoose from "mongoose";
 import sharp from "sharp";
 import path from "node:path";
+import { readdir } from "node:fs/promises";
 
 import app from "../src/app.js";
 import { connectDB } from "../src/config/database.js";
@@ -763,7 +764,45 @@ await savedItem.save();
       expectedImageUrl
     );
   });
+  it("should remove temporary files when Cloudinary upload fails", async () => {
+  const item = await createItem();
+  const imageBuffer = await createTestImage();
 
+  setCloudinaryOperationsForTesting({
+    upload: async () => {
+      throw new Error("Cloudinary upload failed");
+    },
+    destroy: async () => ({
+      result: "ok",
+    }),
+  });
+
+  try {
+    const response = await agent
+      .post(`/api/items/${item._id}/image`)
+      .set("x-csrf-token", csrfToken)
+      .attach("image", imageBuffer, {
+        filename: "test-image.jpg",
+        contentType: "image/jpeg",
+      });
+
+    assert.equal(response.status, 500);
+    assert.equal(response.body.success, false);
+
+    const temporaryFiles = await readdir(
+      path.resolve("tmp", "uploads")
+    );
+
+    assert.equal(
+      temporaryFiles.some((filename) =>
+        filename.startsWith("processed-")
+      ),
+      false
+    );
+  } finally {
+    resetCloudinaryOperationsForTesting();
+  }
+});
 
   it("should reject image uploads without authentication", async () => {
     const item = await createItem();
