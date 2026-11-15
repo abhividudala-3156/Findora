@@ -5,6 +5,7 @@ import {
   before,
   beforeEach,
   after,
+  mock,
 } from "node:test";
 
 import assert from "node:assert/strict";
@@ -439,5 +440,29 @@ describe("Findora Authentication API", () => {
 
     assert.equal(protectedResponse.status, 401);
     assert.equal(protectedResponse.body.success, false);
+  });
+    it("returns HTTP 500 when the MongoDB session store fails", async () => {
+    const sessionGetMock = mock.method(
+      sessionStore,
+      "get",
+      (_sessionId, callback) => {
+        callback(new Error("Simulated session store failure"));
+      }
+    );
+
+    try {
+      const response = await agent.get("/api/auth/me");
+
+      assert.equal(response.status, 500);
+      assert.equal(response.body.success, false);
+      assert.equal(
+        response.body.message,
+        "Internal server error"
+      );
+
+      assert.equal(sessionGetMock.mock.calls.length, 1);
+    } finally {
+      sessionGetMock.mock.restore();
+    }
   });
 });
