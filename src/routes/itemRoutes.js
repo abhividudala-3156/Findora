@@ -39,19 +39,25 @@ import {
 } from "../controllers/adminController.js";
 
 import { getAuditLogs } from "../controllers/auditLogController.js";
+import { getAnalytics } from "../controllers/analyticsController.js";
 
 const router = Router();
 
 // Public routes
 router.get("/", getItems);
 
-// My Claims
+// My Claims and Reports
 router.get("/my-claims", requireAuth, getMyClaims);
-
 router.get("/my-reports", requireAuth, getMyReports);
 
-// Admin review routes
-// These will be connected to the admin controller next.
+// Admin analytics
+router.get(
+  "/admin/analytics",
+  requireAuth,
+  requireAdmin,
+  getAnalytics
+);
+
 // Admin review routes
 router.get(
   "/admin/review",
@@ -81,6 +87,7 @@ router.get(
   requireAdmin,
   getAuditLogs
 );
+
 // Public item details
 router.get("/:id", getItemById);
 

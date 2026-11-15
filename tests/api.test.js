@@ -1843,6 +1843,250 @@ it("prevents a claimant from confirming recovery twice", async () => {
     assert.ok(Array.isArray(response.body.data));
   });
 
+  // ADMIN ANALYTICS TESTS
+
+  it("rejects analytics access without authentication", async () => {
+    const anonymous = await createAnonymousAgent();
+
+    const response = await anonymous.agent.get(
+      "/api/items/admin/analytics"
+    );
+
+    assert.equal(response.status, 401);
+    assert.equal(response.body.success, false);
+  });
+
+  it("prevents a normal user from accessing analytics", async () => {
+    const response = await agent.get(
+      "/api/items/admin/analytics"
+    );
+
+    assert.equal(response.status, 403);
+    assert.equal(response.body.success, false);
+  });
+
+  it("allows an administrator to access analytics", async () => {
+    await User.findByIdAndUpdate(currentUserId, {
+      $set: { role: "admin" },
+    });
+
+    const response = await agent.get(
+      "/api/items/admin/analytics"
+    );
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.success, true);
+    assert.ok(response.body.data.reports);
+    assert.ok(response.body.data.claims);
+    assert.ok(response.body.data.users);
+    assert.ok(Array.isArray(response.body.data.categories));
+    assert.ok(Array.isArray(response.body.data.locations));
+    assert.ok(Array.isArray(response.body.data.monthlyReports));
+  });
+
+  it("rejects an invalid analytics start date", async () => {
+    await User.findByIdAndUpdate(currentUserId, {
+      $set: { role: "admin" },
+    });
+
+    const response = await agent.get(
+      "/api/items/admin/analytics?from=invalid-date"
+    );
+
+    assert.equal(response.status, 400);
+    assert.equal(response.body.success, false);
+  });
+
+  it("rejects an invalid analytics end date", async () => {
+    await User.findByIdAndUpdate(currentUserId, {
+      $set: { role: "admin" },
+    });
+
+    const response = await agent.get(
+      "/api/items/admin/analytics?to=2026-02-30"
+    );
+
+    assert.equal(response.status, 400);
+    assert.equal(response.body.success, false);
+  });
+
+  it("rejects an analytics date range when the start date is after the end date", async () => {
+    await User.findByIdAndUpdate(currentUserId, {
+      $set: { role: "admin" },
+    });
+
+    const response = await agent.get(
+      "/api/items/admin/analytics?from=2026-11-20&to=2026-11-10"
+    );
+
+    assert.equal(response.status, 400);
+    assert.equal(response.body.success, false);
+  });
+
+  it("returns correct report, claim, user, and recovery statistics", async () => {
+    const claimant = await createLoggedInAgent(
+      "analytics-claimant@example.com"
+    );
+
+    await User.findByIdAndUpdate(currentUserId, {
+      $set: { role: "admin" },
+    });
+
+    const lostItem = await createItem({
+      type: "lost",
+      category: "electronics",
+      campusLocation: "Central Library",
+    });
+
+    const foundItem = await createItem({
+      type: "found",
+      category: "books",
+      campusLocation: "Computer Block",
+    });
+
+    await Item.findByIdAndUpdate(lostItem._id, {
+      $set: {
+        moderationStatus: "pending",
+        status: "active",
+        "duplicateCheck.status": "flagged",
+      },
+    });
+
+    await Item.findByIdAndUpdate(foundItem._id, {
+      $set: {
+        moderationStatus: "rejected",
+        status: "resolved",
+        "suspiciousCheck.status": "flagged",
+      },
+    });
+
+    const claimDetails = {
+      item: lostItem._id,
+      claimant: claimant.userId,
+      itemOwner: currentUserId,
+      message: "I can identify this item using its unique details.",
+    };
+
+    await Claim.create({
+      ...claimDetails,
+      status: "pending",
+    });
+
+    await Claim.create({
+      ...claimDetails,
+      status: "approved",
+      returnConfirmedByClaimant: true,
+      returnConfirmedByOwner: true,
+    });
+
+    await Claim.create({
+      ...claimDetails,
+      status: "rejected",
+    });
+
+    await Claim.create({
+      ...claimDetails,
+      status: "cancelled",
+    });
+
+    const response = await agent.get(
+      "/api/items/admin/analytics"
+    );
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.success, true);
+
+    const { reports, claims, users } = response.body.data;
+
+    // Report statistics
+    assert.equal(reports.total, 2);
+    assert.equal(reports.lost, 1);
+    assert.equal(reports.found, 1);
+    assert.equal(reports.pending, 1);
+    assert.equal(reports.rejected, 1);
+    assert.equal(reports.duplicates, 1);
+    assert.equal(reports.suspicious, 1);
+    assert.equal(reports.active, 1);
+    assert.equal(reports.resolved, 1);
+
+    // Claim statistics
+    assert.equal(claims.total, 4);
+    assert.equal(claims.pending, 1);
+    assert.equal(claims.approved, 1);
+    assert.equal(claims.rejected, 1);
+    assert.equal(claims.cancelled, 1);
+    assert.equal(claims.recovered, 1);
+    assert.equal(claims.recoveryRate, 100);
+
+    // User statistics
+    assert.equal(users.total, 2);
+    assert.equal(users.admins, 1);
+    assert.equal(users.regularUsers, 1);
+
+    // Category and location aggregation
+    assert.equal(response.body.data.categories.length, 2);
+    assert.equal(response.body.data.locations.length, 2);
+
+    // Monthly report aggregation
+    assert.equal(response.body.data.monthlyReports.length, 1);
+    assert.equal(response.body.data.monthlyReports[0].count, 2);
+  });
+
+  it("returns zero statistics for a date range without records", async () => {
+    await User.findByIdAndUpdate(currentUserId, {
+      $set: { role: "admin" },
+    });
+
+    const response = await agent.get(
+      "/api/items/admin/analytics?from=2000-01-01&to=2000-01-31"
+    );
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.data.reports.total, 0);
+    assert.equal(response.body.data.claims.total, 0);
+    assert.equal(response.body.data.users.total, 0);
+    assert.equal(response.body.data.categories.length, 0);
+    assert.equal(response.body.data.locations.length, 0);
+    assert.equal(response.body.data.monthlyReports.length, 0);
+  });
+
+it("includes records created on both boundaries of a same-day date range", async () => {
+  await User.findByIdAndUpdate(currentUserId, {
+    $set: { role: "admin" },
+  });
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  const item = await createItem({
+    type: "lost",
+    category: "electronics",
+    campusLocation: "Central Library",
+  });
+
+  await Claim.create({
+    item: item._id,
+    claimant: currentUserId,
+    itemOwner: currentUserId,
+    message: "I can identify this item using its unique details.",
+    status: "approved",
+    returnConfirmedByClaimant: true,
+    returnConfirmedByOwner: true,
+  });
+
+  const response = await agent.get(
+    `/api/items/admin/analytics?from=${today}&to=${today}`
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.success, true);
+
+  assert.equal(response.body.data.reports.total, 1);
+  assert.equal(response.body.data.claims.total, 1);
+  assert.equal(response.body.data.claims.recovered, 1);
+  assert.equal(response.body.data.users.total, 1);
+});
+
+
     // ADMIN MODERATION ACTIONS
 
   it("allows an administrator to approve a pending report", async () => {
@@ -2232,5 +2476,208 @@ it("prevents a claimant from confirming recovery twice", async () => {
 
     const savedItem = await Item.findById(itemId);
     assert.equal(savedItem.moderationStatus, "approved");
+  });
+    // ==========================================
+  // ADMIN ANALYTICS TESTS
+  // ==========================================
+
+  it("does not allow anonymous users to access admin analytics", async () => {
+    const anonymous = await createAnonymousAgent();
+
+    const response = await anonymous.agent.get(
+      "/api/items/admin/analytics"
+    );
+
+    assert.equal(response.status, 401);
+    assert.equal(response.body.success, false);
+  });
+
+  it("does not allow regular users to access admin analytics", async () => {
+    const response = await agent.get("/api/items/admin/analytics");
+
+    assert.equal(response.status, 403);
+    assert.equal(response.body.success, false);
+  });
+
+  it("returns report, claim, user, category and location analytics for admins", async () => {
+    // Promote the current test user to administrator.
+    await User.findByIdAndUpdate(currentUserId, {
+      $set: { role: "admin" },
+    });
+
+    // Create another regular user.
+    await createLoggedInAgent("analytics-student@example.com");
+
+    // Create a lost report.
+    const lostItem = await createItem({
+      title: "Analytics lost phone",
+      type: "lost",
+      category: "electronics",
+      campusLocation: "Central Library",
+    });
+
+    // Create a found report.
+    const foundItem = await createItem({
+      title: "Analytics found book",
+      type: "found",
+      category: "books",
+      campusLocation: "Main Block",
+    });
+
+    // Set report statuses and detection flags.
+    await Item.findByIdAndUpdate(lostItem._id, {
+      $set: {
+        moderationStatus: "pending",
+        status: "active",
+      },
+    });
+
+    await Item.findByIdAndUpdate(foundItem._id, {
+      $set: {
+        moderationStatus: "approved",
+        status: "claimed",
+        "duplicateCheck.status": "flagged",
+        "suspiciousCheck.status": "flagged",
+      },
+    });
+
+    // Create one completed recovery claim.
+    await Claim.create({
+      item: foundItem._id,
+      claimant: currentUserId,
+      itemOwner: currentUserId,
+      message: "I can identify this item using its unique details.",
+      status: "approved",
+      returnConfirmedByClaimant: true,
+      returnConfirmedByOwner: true,
+    });
+
+    // Create one pending claim.
+    await Claim.create({
+      item: lostItem._id,
+      claimant: currentUserId,
+      itemOwner: currentUserId,
+      message: "I have additional details to identify this item.",
+      status: "pending",
+    });
+
+    const response = await agent.get(
+      "/api/items/admin/analytics"
+    );
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.success, true);
+
+    const data = response.body.data;
+
+    // Report statistics.
+    assert.equal(data.reports.total, 2);
+    assert.equal(data.reports.lost, 1);
+    assert.equal(data.reports.found, 1);
+    assert.equal(data.reports.pending, 1);
+    assert.equal(data.reports.approved, 1);
+    assert.equal(data.reports.active, 1);
+    assert.equal(data.reports.claimed, 1);
+    assert.equal(data.reports.duplicates, 1);
+    assert.equal(data.reports.suspicious, 1);
+
+    // Claim statistics.
+    assert.equal(data.claims.total, 2);
+    assert.equal(data.claims.pending, 1);
+    assert.equal(data.claims.approved, 1);
+    assert.equal(data.claims.recovered, 1);
+    assert.equal(data.claims.recoveryRate, 100);
+
+    // User statistics.
+    assert.equal(data.users.total, 2);
+    assert.equal(data.users.admins, 1);
+    assert.equal(data.users.regularUsers, 1);
+
+    // Distribution and trend data.
+    assert.equal(data.categories.length, 2);
+    assert.equal(data.locations.length, 2);
+    assert.ok(Array.isArray(data.monthlyReports));
+  });
+
+  it("filters analytics reports by the requested date range", async () => {
+    await User.findByIdAndUpdate(currentUserId, {
+      $set: { role: "admin" },
+    });
+
+    const includedItem = await createItem({
+      title: "Report inside analytics date range",
+    });
+
+    const excludedItem = await createItem({
+      title: "Report outside analytics date range",
+    });
+
+    // Set deterministic report creation dates directly in MongoDB.
+    await Item.collection.updateOne(
+      { _id: includedItem._id },
+      {
+        $set: {
+          createdAt: new Date("2026-10-10T12:00:00.000Z"),
+        },
+      }
+    );
+
+    await Item.collection.updateOne(
+      { _id: excludedItem._id },
+      {
+        $set: {
+          createdAt: new Date("2026-10-11T12:00:00.000Z"),
+        },
+      }
+    );
+
+    const response = await agent.get(
+      "/api/items/admin/analytics?from=2026-10-10&to=2026-10-10"
+    );
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.success, true);
+    assert.equal(response.body.data.reports.total, 1);
+    assert.equal(response.body.filters.from, "2026-10-10");
+    assert.equal(response.body.filters.to, "2026-10-10");
+  });
+
+  it("rejects an invalid analytics start date", async () => {
+    await User.findByIdAndUpdate(currentUserId, {
+      $set: { role: "admin" },
+    });
+
+    const response = await agent.get(
+      "/api/items/admin/analytics?from=invalid-date"
+    );
+
+    assert.equal(response.status, 400);
+    assert.equal(response.body.success, false);
+  });
+
+  it("rejects an impossible analytics end date", async () => {
+    await User.findByIdAndUpdate(currentUserId, {
+      $set: { role: "admin" },
+    });
+
+    const response = await agent.get(
+      "/api/items/admin/analytics?to=2026-02-30"
+    );
+
+    assert.equal(response.status, 400);
+    assert.equal(response.body.success, false);
+  });
+
+  it("rejects an analytics start date later than the end date", async () => {
+    await User.findByIdAndUpdate(currentUserId, {
+      $set: { role: "admin" },
+    });
+
+    const response = await agent.get(
+      "/api/items/admin/analytics?from=2026-10-20&to=2026-10-10"
+    );
+
+    assert.equal(response.status, 400);
+    assert.equal(response.body.success, false);
   });
 });

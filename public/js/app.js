@@ -91,6 +91,25 @@ const auditLogsList = document.getElementById("audit-logs-list");
 const auditLogsMessage = document.getElementById("audit-logs-message");
 const auditLogsPagination = document.getElementById("audit-logs-pagination");
 const refreshAuditLogsButton = document.getElementById("refresh-audit-logs");
+// Admin Analytics elements
+const analyticsNav = document.getElementById("analytics-nav");
+const analyticsSection = document.getElementById("analytics");
+
+const refreshAnalyticsButton = document.getElementById(
+  "refresh-analytics"
+);
+
+const applyAnalyticsFilterButton = document.getElementById(
+  "apply-analytics-filter"
+);
+
+const resetAnalyticsFilterButton = document.getElementById(
+  "reset-analytics-filter"
+);
+
+const analyticsFrom = document.getElementById("analytics-from");
+const analyticsTo = document.getElementById("analytics-to");
+const analyticsMessage = document.getElementById("analytics-message");
 
 // ==========================================
 // 2. APPLICATION STATE
@@ -342,6 +361,14 @@ function updateAdminReviewVisibility() {
 
   if (auditLogsSection) {
     auditLogsSection.hidden = !isAdmin;
+  }
+    // Analytics Dashboard: administrators only.
+  if (analyticsNav) {
+    analyticsNav.hidden = !isAdmin;
+  }
+
+  if (analyticsSection) {
+    analyticsSection.hidden = !isAdmin;
   }
 }
 
@@ -1718,7 +1745,218 @@ auditLogsPagination.append(previousButton, nextButton);
     console.error("Load audit logs error:", error);
   }
 }
+// ==========================================
+// ADMIN ANALYTICS DASHBOARD
+// ==========================================
 
+// Display simple horizontal bar charts.
+function displayAnalyticsChart(elementId, records, labelField) {
+  const container = document.getElementById(elementId);
+
+  if (!container) return;
+
+  container.innerHTML = "";
+
+  if (!records || records.length === 0) {
+    container.textContent = "No data available.";
+    return;
+  }
+
+  const maximum = Math.max(
+    ...records.map((record) => record.count),
+    1
+  );
+
+  records.forEach((record) => {
+    const label = document.createElement("p");
+    label.className = "analytics-chart-label";
+    label.textContent = record[labelField] || "Unknown";
+
+    const bar = document.createElement("div");
+    bar.className = "analytics-bar";
+
+    const fill = document.createElement("div");
+    fill.className = "analytics-bar-fill";
+
+    fill.style.width = `${(record.count / maximum) * 100}%`;
+
+    const count = document.createElement("span");
+    count.textContent = record.count;
+
+    bar.appendChild(fill);
+    bar.appendChild(count);
+
+    container.appendChild(label);
+    container.appendChild(bar);
+  });
+}
+
+// Load analytics from the server.
+async function loadAnalytics() {
+  if (
+    !currentUser ||
+    currentUser.role !== "admin" ||
+    !analyticsSection
+  ) {
+    return;
+  }
+
+  hideMessage(analyticsMessage);
+
+  const from = analyticsFrom?.value || "";
+  const to = analyticsTo?.value || "";
+
+  if (from && to && from > to) {
+    showMessage(
+      analyticsMessage,
+      "Start date cannot be after end date.",
+      "error"
+    );
+    return;
+  }
+
+  let url = "/api/items/admin/analytics";
+
+  const params = new URLSearchParams();
+
+  if (from) params.append("from", from);
+  if (to) params.append("to", to);
+
+  if (params.toString()) {
+    url += `?${params.toString()}`;
+  }
+
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      credentials: "same-origin",
+      headers: {
+        Accept: "application/json",
+      },
+    });
+
+    const result = await response.json();
+
+    if (!response.ok || !result.success) {
+      throw new Error(
+        result.message || "Unable to load analytics."
+      );
+    }
+
+    const data = result.data;
+
+    // Summary cards.
+    document.getElementById("analytics-total-reports").textContent =
+      data.reports.total;
+
+    document.getElementById("analytics-total-claims").textContent =
+      data.claims.total;
+
+    document.getElementById("analytics-recovered").textContent =
+      data.claims.recovered;
+
+    document.getElementById("analytics-total-users").textContent =
+      data.users.total;
+
+    // Report statistics.
+    const reportFields = [
+      "lost",
+      "found",
+      "pending",
+      "approved",
+      "rejected",
+      "active",
+      "claimed",
+      "resolved",
+      "duplicates",
+      "suspicious",
+    ];
+
+    reportFields.forEach((field) => {
+      const element = document.getElementById(
+        `analytics-${field}`
+      );
+
+      if (element) {
+        element.textContent = data.reports[field];
+      }
+    });
+
+    // Claim statistics.
+    const claimFields = [
+      "pending",
+      "approved",
+      "rejected",
+      "cancelled",
+    ];
+
+    claimFields.forEach((field) => {
+      document.getElementById(
+        `analytics-${field}-claims`
+      ).textContent = data.claims[field];
+    });
+
+    document.getElementById("analytics-recovery-rate").textContent =
+      `${data.claims.recoveryRate}%`;
+
+    // User statistics.
+    document.getElementById("analytics-admins").textContent =
+      data.users.admins;
+
+    document.getElementById("analytics-regular-users").textContent =
+      data.users.regularUsers;
+
+    // Report status chart.
+    displayAnalyticsChart(
+      "analytics-report-status",
+      [
+        { label: "Active", count: data.reports.active },
+        { label: "Claimed", count: data.reports.claimed },
+        { label: "Resolved", count: data.reports.resolved },
+      ],
+      "label"
+    );
+
+    // Category chart.
+    displayAnalyticsChart(
+      "analytics-categories",
+      data.categories.map((item) => ({
+        label: item._id,
+        count: item.count,
+      })),
+      "label"
+    );
+
+    // Campus location chart.
+    displayAnalyticsChart(
+      "analytics-locations",
+      data.locations.map((item) => ({
+        label: item._id,
+        count: item.count,
+      })),
+      "label"
+    );
+
+    // Monthly trend chart.
+    displayAnalyticsChart(
+      "analytics-monthly",
+      data.monthlyReports.map((item) => ({
+        label: item._id,
+        count: item.count,
+      })),
+      "label"
+    );
+
+  } catch (error) {
+    console.error("Analytics loading error:", error);
+
+    showMessage(
+      analyticsMessage,
+      error.message || "Unable to load analytics.",
+      "error"
+    );
+  }
+}
 
 // Load claims submitted for an item.
 async function loadItemClaims(itemId, content) {
@@ -2474,6 +2712,35 @@ if (refreshAuditLogsButton) {
   refreshAuditLogsButton.addEventListener("click", () => {
     hideMessage(auditLogsMessage);
     loadAuditLogs();
+  });
+}
+// Analytics Dashboard navigation
+if (analyticsNav) {
+  analyticsNav.addEventListener("click", () => {
+    loadAnalytics();
+  });
+}
+
+// Analytics refresh button
+if (refreshAnalyticsButton) {
+  refreshAnalyticsButton.addEventListener("click", () => {
+    loadAnalytics();
+  });
+}
+
+// Apply analytics date filter
+if (applyAnalyticsFilterButton) {
+  applyAnalyticsFilterButton.addEventListener("click", () => {
+    loadAnalytics();
+  });
+}
+
+// Reset analytics date filter
+if (resetAnalyticsFilterButton) {
+  resetAnalyticsFilterButton.addEventListener("click", () => {
+    analyticsFrom.value = "";
+    analyticsTo.value = "";
+    loadAnalytics();
   });
 }
 // Admin Review event listeners

@@ -655,6 +655,9 @@
 <a class="nav-link" href="#audit-logs" id="audit-logs-nav" hidden>
   Audit Logs
 </a>
+<a class="nav-link" href="#analytics" id="analytics-nav" hidden>
+  Analytics
+</a>
 
       <a class="nav-link" href="#notifications" id="notifications-nav" hidden>
         Notifications
@@ -929,6 +932,153 @@
   </div>
 
   <div id="audit-logs-pagination"></div>
+</section>
+<!-- Admin Analytics Dashboard -->
+<section id="analytics" class="page-section" hidden>
+
+  <div class="section-header">
+    <div>
+      <h2>Admin Analytics Dashboard</h2>
+      <p class="muted">
+        Overview of campus reports, claims, recoveries and users.
+      </p>
+    </div>
+
+    <button
+      type="button"
+      id="refresh-analytics"
+      class="btn btn-secondary"
+    >
+      Refresh
+    </button>
+  </div>
+
+  <!-- Date Filters -->
+  <div class="analytics-filters">
+
+    <div>
+      <label for="analytics-from">From Date</label>
+      <input type="date" id="analytics-from">
+    </div>
+
+    <div>
+      <label for="analytics-to">To Date</label>
+      <input type="date" id="analytics-to">
+    </div>
+
+    <button
+      type="button"
+      id="apply-analytics-filter"
+      class="btn btn-primary"
+    >
+      Apply Filter
+    </button>
+
+    <button
+      type="button"
+      id="reset-analytics-filter"
+      class="btn btn-secondary"
+    >
+      Reset
+    </button>
+
+  </div>
+
+  <p
+    id="analytics-message"
+    class="message"
+    role="status"
+    aria-live="polite"
+    hidden
+  ></p>
+
+  <!-- Summary Cards -->
+  <div class="analytics-summary-grid">
+
+    <article class="analytics-card">
+      <h3>Total Reports</h3>
+      <p id="analytics-total-reports">0</p>
+      <span>Lost and found reports</span>
+    </article>
+
+    <article class="analytics-card">
+      <h3>Total Claims</h3>
+      <p id="analytics-total-claims">0</p>
+      <span>Submitted ownership claims</span>
+    </article>
+
+    <article class="analytics-card">
+      <h3>Completed Recoveries</h3>
+      <p id="analytics-recovered">0</p>
+      <span>Both parties confirmed handover</span>
+    </article>
+
+    <article class="analytics-card">
+      <h3>Total Users</h3>
+      <p id="analytics-total-users">0</p>
+      <span>Registered campus users</span>
+    </article>
+
+  </div>
+
+  <!-- Report Statistics -->
+  <div class="analytics-grid">
+
+    <article class="analytics-panel">
+      <h3>Report Status</h3>
+      <div id="analytics-report-status" class="analytics-chart">
+        Loading report statistics...
+      </div>
+    </article>
+
+    <article class="analytics-panel">
+      <h3>Category Distribution</h3>
+      <div id="analytics-categories" class="analytics-chart">
+        Loading categories...
+      </div>
+    </article>
+
+    <article class="analytics-panel">
+      <h3>Campus Locations</h3>
+      <div id="analytics-locations" class="analytics-chart">
+        Loading locations...
+      </div>
+    </article>
+
+    <article class="analytics-panel">
+      <h3>Monthly Report Trends</h3>
+      <div id="analytics-monthly" class="analytics-chart">
+        Loading monthly trends...
+      </div>
+    </article>
+
+  </div>
+
+  <!-- Additional Statistics -->
+  <div class="analytics-panel analytics-details">
+    <h3>Additional Statistics</h3>
+
+    <div class="analytics-detail-grid">
+      <p>Lost Reports: <strong id="analytics-lost">0</strong></p>
+      <p>Found Reports: <strong id="analytics-found">0</strong></p>
+      <p>Pending Reports: <strong id="analytics-pending">0</strong></p>
+      <p>Approved Reports: <strong id="analytics-approved">0</strong></p>
+      <p>Rejected Reports: <strong id="analytics-rejected">0</strong></p>
+      <p>Active Reports: <strong id="analytics-active">0</strong></p>
+      <p>Claimed Reports: <strong id="analytics-claimed">0</strong></p>
+      <p>Resolved Reports: <strong id="analytics-resolved">0</strong></p>
+      <p>Duplicate Reports: <strong id="analytics-duplicates">0</strong></p>
+      <p>Suspicious Reports: <strong id="analytics-suspicious">0</strong></p>
+      <p>Pending Claims: <strong id="analytics-pending-claims">0</strong></p>
+      <p>Approved Claims: <strong id="analytics-approved-claims">0</strong></p>
+      <p>Rejected Claims: <strong id="analytics-rejected-claims">0</strong></p>
+      <p>Cancelled Claims: <strong id="analytics-cancelled-claims">0</strong></p>
+      <p>Recovery Rate: <strong id="analytics-recovery-rate">0%</strong></p>
+      <p>Administrators: <strong id="analytics-admins">0</strong></p>
+      <p>Regular Users: <strong id="analytics-regular-users">0</strong></p>
+    </div>
+  </div>
+
 </section>
 
     <!-- Notifications Section -->
