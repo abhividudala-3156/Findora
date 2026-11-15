@@ -1522,6 +1522,38 @@ it("prevents a claimant from confirming recovery twice", async () => {
     const savedClaim = await Claim.findById(claimId);
     assert.equal(savedClaim.status, "pending");
   });
+  it("prevents another user from rejecting a claim", async () => {
+    const item = await createItem();
+
+    const claimant = await createLoggedInAgent(
+      "unauthorized-rejection-claimant@example.com"
+    );
+
+    const claimResponse = await claimant.agent
+      .post(`/api/items/${item._id}/claims`)
+      .set("x-csrf-token", claimant.csrfToken)
+      .send({
+        message:
+          "I can identify this item by its unique marks and details.",
+      });
+
+    assert.equal(claimResponse.status, 201);
+
+    const claimId = claimResponse.body.data._id;
+
+    const anotherUser = await createLoggedInAgent(
+      "unauthorized-rejection-reviewer@example.com"
+    );
+
+    const response = await anotherUser.agent
+      .patch(`/api/items/${item._id}/claims/${claimId}/reject`)
+      .set("x-csrf-token", anotherUser.csrfToken);
+
+    assert.equal(response.status, 403);
+
+    const savedClaim = await Claim.findById(claimId);
+    assert.equal(savedClaim.status, "pending");
+  });
   it("prevents a claimant from approving their own claim", async () => {
     const item = await createItem();
 
